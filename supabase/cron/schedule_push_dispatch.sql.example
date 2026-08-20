@@ -1,0 +1,56 @@
+-- Operator SQL. Do not commit real secrets.
+-- Apply in the hosted SQL editor after Edge Function secrets are set.
+--
+-- Production: hourly UTC. push-dispatch no-ops unless Europe/Copenhagen local hour is 08.
+-- Scheduler proof: temporary once-a-minute job with ignoreScheduleWindow, then unschedule.
+
+create extension if not exists pg_cron with schema pg_catalog;
+create extension if not exists pg_net with schema extensions;
+
+-- One-time Vault secrets (skip if they already exist):
+--   select vault.create_secret('https://<project-ref>.supabase.co', 'project_url');
+--   select vault.create_secret('<same value as Edge Function CRON_SECRET>', 'cron_secret');
+
+select cron.unschedule(jobid)
+from cron.job
+where jobname = 'push-dispatch-hourly';
+
+select
+  cron.schedule(
+    'push-dispatch-hourly',
+    '0 * * * *',
+    $$
+    select
+      net.http_post(
+        url := (select decrypted_secret from vault.decrypted_secrets where name = 'project_url')
+          || '/functions/v1/push-dispatch',
+        headers := jsonb_build_object(
+          'Content-Type', 'application/json',
+          'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'cron_secret')
+        ),
+        body := '{"ignoreScheduleWindow": false}'::jsonb,
+        timeout_milliseconds := 50000
+      ) as request_id;
+    $$
+  );
+
+-- Temporary scheduler proof (do not leave this running):
+-- select cron.unschedule(jobid) from cron.job where jobname = 'push-dispatch-scheduler-proof';
+-- select cron.schedule(
+--   'push-dispatch-scheduler-proof',
+--   '* * * * *',
+--   $$
+--   select net.http_post(
+--     url := (select decrypted_secret from vault.decrypted_secrets where name = 'project_url')
+--       || '/functions/v1/push-dispatch',
+--     headers := jsonb_build_object(
+--       'Content-Type', 'application/json',
+--       'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'cron_secret')
+--     ),
+--     body := '{"ignoreScheduleWindow": true}'::jsonb,
+--     timeout_milliseconds := 50000
+--   ) as request_id;
+--   $$
+-- );
+-- After the closed-PWA notification arrives:
+-- select cron.unschedule(jobid) from cron.job where jobname = 'push-dispatch-scheduler-proof';

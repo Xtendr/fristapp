@@ -1,0 +1,55 @@
+import { InventoryRow } from "@/components/inventory-row"
+import { classifyExpiry } from "@/lib/inventory/expiry"
+import type { InventoryItem } from "@/lib/inventory/queries"
+
+const attentionOrder = ["expired", "today", "tomorrow", "soon"] as const
+
+const attentionTitles = {
+  expired: "Expired",
+  today: "Today",
+  tomorrow: "Tomorrow",
+  soon: "Soon",
+} as const
+
+export function AttentionList({ items }: { items: InventoryItem[] }) {
+  const grouped = new Map<(typeof attentionOrder)[number], InventoryItem[]>()
+  for (const bucket of attentionOrder) {
+    grouped.set(bucket, [])
+  }
+  for (const item of items) {
+    const bucket = classifyExpiry(item.expiryDate)
+    if (bucket === "later") {
+      continue
+    }
+    grouped.get(bucket)?.push(item)
+  }
+
+  const sections = attentionOrder.filter(
+    (bucket) => (grouped.get(bucket)?.length ?? 0) > 0
+  )
+
+  if (sections.length === 0) {
+    return (
+      <p className="text-sm leading-6 text-muted-foreground">
+        Nothing needs attention.
+      </p>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      {sections.map((bucket) => (
+        <section key={bucket} className="flex flex-col">
+          <h2 className="text-sm font-medium">{attentionTitles[bucket]}</h2>
+          <ul className="flex flex-col">
+            {(grouped.get(bucket) ?? []).map((item) => (
+              <li key={item.id}>
+                <InventoryRow item={item} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  )
+}
