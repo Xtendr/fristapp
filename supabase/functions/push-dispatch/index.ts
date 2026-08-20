@@ -13,6 +13,7 @@ import { sendWebPush } from "./send.ts"
 
 type DispatchBody = {
   ignoreScheduleWindow?: boolean
+  vapidHealthcheck?: boolean
 }
 
 type SubscriptionRow = {
@@ -124,6 +125,48 @@ async function markSuccess(
     .eq("id", subscriptionId)
 }
 
+function vapidHealthReport(raw: string, subject: string) {
+  const trimmed = raw.trim().replace(/^\uFEFF/, "").replace(/\r/g, "")
+  const pos = 219
+  const ch = trimmed[pos]
+  const char219Kind = !ch
+    ? "eof"
+    : /[A-Za-z0-9_-]/.test(ch)
+      ? "b64"
+      : ch === '"'
+        ? "quote"
+        : ch === "}"
+          ? "brace"
+          : ch === ","
+            ? "comma"
+            : "other"
+  let parseError: string | null = null
+  try {
+    JSON.parse(trimmed)
+  } catch (error) {
+    parseError = error instanceof Error ? error.message : "parse failed"
+  }
+  return {
+    ok: parseError === null,
+    length: trimmed.length,
+    startsWithBrace: trimmed.startsWith("{"),
+    endsWithBrace: trimmed.endsWith("}"),
+    quotedKty: trimmed.includes('"kty"'),
+    quotedCrv: trimmed.includes('"crv"'),
+    quotedX: /"x"\s*:/.test(trimmed),
+    quotedY: /"y"\s*:/.test(trimmed),
+    quotedD: /"d"\s*:/.test(trimmed),
+    char219Kind,
+    parseError,
+    subjectScheme: subject.startsWith("mailto:")
+      ? "mailto"
+      : subject.startsWith("https:")
+        ? "https"
+        : "other",
+    subjectIsLocalhost: subject.includes("localhost"),
+  }
+}
+
 async function sendToSubscription(options: {
   admin: ReturnType<typeof adminClient>
   subscription: SubscriptionRow
@@ -131,12 +174,21 @@ async function sendToSubscription(options: {
   vapidPrivateKey: string
   vapidSubject: string
 }) {
-  const result = await sendWebPush({
-    subscription: options.subscription,
-    payload: options.payload,
-    vapidPrivateKey: options.vapidPrivateKey,
-    vapidSubject: options.vapidSubject,
-  })
+  let result: Awaited<ReturnType<typeof sendWebPush>>
+  try {
+    result = await sendWebPush({
+      subscription: options.subscription,
+      payload: options.payload,
+      vapidPrivateKey: options.vapidPrivateKey,
+      vapidSubject: options.vapidSubject,
+    })
+  } catch (error) {
+    console.error(
+      "web-push-throw",
+      error instanceof Error ? error.message : "unknown send error"
+    )
+    return "failed" as const
+  }
 
   if (result.gone) {
     await deleteDeadSubscription(options.admin, options.subscription.id)
@@ -188,7 +240,18 @@ async function dispatchTest(options: {
     else failed += 1
   }
 
-  return json(200, { ok: sent > 0, mode: "test", sent, failed, gone })
+  if (sent === 0) {
+    return json(502, {
+      ok: false,
+      mode: "test",
+      sent,
+      failed,
+      gone,
+      error: "Could not deliver a test notification to this device.",
+    })
+  }
+
+  return json(200, { ok: true, mode: "test", sent, failed, gone })
 }
 
 async function dispatchReminders(options: {
@@ -337,6 +400,18 @@ async function dispatchReminders(options: {
 }
 
 Deno.serve(async (req) => {
+  try {
+    return await handlePushDispatch(req)
+  } catch (error) {
+    console.error(
+      "push-dispatch-uncaught",
+      error instanceof Error ? error.message : "unknown"
+    )
+    return json(500, { ok: false, error: "Push dispatch failed." })
+  }
+})
+
+async function handlePushDispatch(req: Request) {
   if (req.method !== "POST") {
     return json(405, { ok: false, error: "Method not allowed." })
   }
@@ -369,6 +444,13 @@ Deno.serve(async (req) => {
   const admin = adminClient(env.supabaseUrl, env.serviceRoleKey)
 
   if (timingSafeEqual(token, env.cronSecret)) {
+    if (body.vapidHealthcheck) {
+      return json(200, {
+        ok: true,
+        mode: "vapid-healthcheck",
+        vapid: vapidHealthReport(env.vapidPrivateKey, env.vapidSubject),
+      })
+    }
     if (!body.ignoreScheduleWindow && !isCopenhagenDispatchHour()) {
       return json(200, {
         ok: true,
@@ -395,4 +477,4 @@ Deno.serve(async (req) => {
     vapidPrivateKey: env.vapidPrivateKey,
     vapidSubject: env.vapidSubject,
   })
-})
+}

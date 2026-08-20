@@ -105,9 +105,16 @@ export async function sendTestPushNotification(): Promise<{ error: string } | { 
   const { url } = getSupabasePublicEnv()
   const supabase = await createClient()
   const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return { error: "Sign in to send a test notification." }
+  }
+
+  const {
     data: { session },
   } = await supabase.auth.getSession()
-
   if (!session?.access_token) {
     return { error: "Sign in to send a test notification." }
   }

@@ -3,8 +3,6 @@ import { redirect } from "next/navigation"
 import { AppShell } from "@/components/app-shell"
 import { getSessionHousehold } from "@/lib/household/session"
 
-export const dynamic = "force-dynamic"
-
 export default async function AppLayout({
   children,
 }: {

@@ -11,12 +11,22 @@ export type PushSendResult = {
   gone: boolean
 }
 
-function parsePrivateJwk(raw: string): JsonWebKey {
-  const trimmed = raw.trim()
-  if (trimmed.startsWith("{")) {
-    return JSON.parse(trimmed) as JsonWebKey
+export function parsePrivateJwk(raw: string): JsonWebKey {
+  let trimmed = raw.trim().replace(/^\uFEFF/, "").replace(/\r/g, "")
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    trimmed = trimmed.slice(1, -1)
   }
-  throw new Error("VAPID_PRIVATE_KEY must be the JWK JSON from `npx @pushforge/builder vapid`.")
+  if (!trimmed.startsWith("{")) {
+    throw new Error("VAPID_PRIVATE_KEY must be the JWK JSON from `npx @pushforge/builder vapid`.")
+  }
+  try {
+    return JSON.parse(trimmed) as JsonWebKey
+  } catch {
+    throw new Error("VAPID_PRIVATE_KEY is not valid JWK JSON.")
+  }
 }
 
 export async function sendWebPush(options: {
@@ -50,8 +60,14 @@ export async function sendWebPush(options: {
     body,
   })
 
+  const status = response.status
+  if (status < 200 || status >= 300) {
+    const detail = (await response.text().catch(() => "")).slice(0, 180)
+    console.error("web-push-failed", { status, detail })
+  }
+
   return {
-    status: response.status,
-    gone: response.status === 404 || response.status === 410,
+    status,
+    gone: status === 404 || status === 410,
   }
 }
