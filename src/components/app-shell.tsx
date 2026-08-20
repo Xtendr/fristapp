@@ -1,13 +1,36 @@
-import { APP_NAME } from "@/lib/app"
-import { BottomNav } from "@/components/bottom-nav"
+"use client"
 
-export function AppShell({
-  householdName,
+import { AddTab } from "@/components/add-tab"
+import { BottomNav } from "@/components/bottom-nav"
+import { HomeTab } from "@/components/home-tab"
+import { HouseholdTab } from "@/components/household-tab"
+import { InventoryTab } from "@/components/inventory-tab"
+import { APP_NAME } from "@/lib/app"
+import type { AppTabHref } from "@/lib/app-tabs"
+import { AppSessionProvider, useAppSession } from "@/lib/app-session"
+import type { HouseholdRole } from "@/lib/supabase/database.types"
+
+function TabPanel({
+  href,
+  active,
   children,
 }: {
-  householdName: string
+  href: AppTabHref
+  active: AppTabHref
   children: React.ReactNode
 }) {
+  const isActive = href === active
+  return (
+    <div hidden={!isActive} inert={!isActive} aria-hidden={!isActive}>
+      {children}
+    </div>
+  )
+}
+
+function AppShellFrame({ children }: { children: React.ReactNode }) {
+  const { householdName, clientTabs, activeTab } = useAppSession()
+  const showClientTabs = clientTabs && activeTab !== null
+
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col">
       <header className="flex items-end justify-between gap-4 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
@@ -16,8 +39,52 @@ export function AppShell({
           <p className="text-xs text-muted-foreground">{householdName}</p>
         </div>
       </header>
-      <main className="flex-1 pb-24">{children}</main>
+      <main className="flex-1 pb-24">
+        {showClientTabs && activeTab ? (
+          <>
+            <TabPanel href="/" active={activeTab}>
+              <HomeTab />
+            </TabPanel>
+            <TabPanel href="/inventory" active={activeTab}>
+              <InventoryTab />
+            </TabPanel>
+            <TabPanel href="/add" active={activeTab}>
+              <AddTab />
+            </TabPanel>
+            <TabPanel href="/household" active={activeTab}>
+              <HouseholdTab />
+            </TabPanel>
+          </>
+        ) : (
+          children
+        )}
+      </main>
       <BottomNav />
     </div>
+  )
+}
+
+export function AppShell({
+  userId,
+  householdId,
+  householdName,
+  role,
+  children,
+}: {
+  userId: string
+  householdId: string
+  householdName: string
+  role: HouseholdRole
+  children: React.ReactNode
+}) {
+  return (
+    <AppSessionProvider
+      userId={userId}
+      householdId={householdId}
+      householdName={householdName}
+      role={role}
+    >
+      <AppShellFrame>{children}</AppShellFrame>
+    </AppSessionProvider>
   )
 }

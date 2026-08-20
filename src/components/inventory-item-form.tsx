@@ -15,6 +15,7 @@ import {
   deleteInventoryItem,
   updateInventoryItem,
 } from "@/lib/inventory/actions"
+import { useOptionalAppSession } from "@/lib/app-session"
 import { storageLabel } from "@/lib/inventory/expiry"
 import { storageLocations } from "@/lib/inventory/schema"
 import type { StorageLocation } from "@/lib/supabase/database.types"
@@ -50,6 +51,7 @@ export function InventoryItemForm({
   const [notice, setNotice] = useState<string | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [pending, startTransition] = useTransition()
+  const session = useOptionalAppSession()
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -72,6 +74,7 @@ export function InventoryItemForm({
           storageLocation: current.storageLocation,
           quantity: 1,
         }))
+        await session?.refreshInventory()
         return
       }
 

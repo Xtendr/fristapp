@@ -7,7 +7,7 @@ import {
   storageLabel,
   type ExpiryBucket,
 } from "@/lib/inventory/expiry"
-import type { InventoryItem } from "@/lib/inventory/queries"
+import type { InventoryItem } from "@/lib/inventory/item"
 import { cn } from "@/lib/utils"
 
 function expiryClass(bucket: ExpiryBucket) {

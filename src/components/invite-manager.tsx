@@ -1,6 +1,5 @@
 "use client"
 
-import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -16,11 +15,12 @@ type Invite = {
 export function InviteManager({
   householdId,
   invites,
+  onChanged,
 }: {
   householdId: string
   invites: Invite[]
+  onChanged?: () => void
 }) {
-  const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [freshUrl, setFreshUrl] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -45,7 +45,7 @@ export function InviteManager({
                 return
               }
               setFreshUrl(result.url)
-              router.refresh()
+              onChanged?.()
             })
           }}
         >
@@ -86,7 +86,7 @@ export function InviteManager({
                       setError(result.error)
                       return
                     }
-                    router.refresh()
+                    onChanged?.()
                   })
                 }}
               >

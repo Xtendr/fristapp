@@ -1,6 +1,5 @@
 "use client"
 
-import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -16,11 +15,12 @@ import { renameHousehold } from "@/lib/household/actions"
 export function RenameHouseholdForm({
   householdId,
   currentName,
+  onRenamed,
 }: {
   householdId: string
   currentName: string
+  onRenamed?: (name: string) => void
 }) {
-  const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -34,7 +34,10 @@ export function RenameHouseholdForm({
         setError(result.error)
         return
       }
-      router.refresh()
+      const name = String(formData.get("name") ?? "").trim()
+      if (name) {
+        onRenamed?.(name)
+      }
     })
   }
 

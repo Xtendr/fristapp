@@ -1,30 +1,8 @@
 import { attentionUpperBound } from "@/lib/inventory/expiry"
+import { mapInventoryItem, type InventoryItem } from "@/lib/inventory/item"
 import { createClient } from "@/lib/supabase/server"
-import type { StorageLocation } from "@/lib/supabase/database.types"
 
-export type InventoryItem = {
-  id: string
-  displayName: string
-  quantity: number
-  expiryDate: string
-  storageLocation: StorageLocation
-}
-
-function mapRow(row: {
-  id: string
-  display_name: string
-  quantity: number
-  expiry_date: string
-  storage_location: StorageLocation
-}): InventoryItem {
-  return {
-    id: row.id,
-    displayName: row.display_name,
-    quantity: row.quantity,
-    expiryDate: row.expiry_date,
-    storageLocation: row.storage_location,
-  }
-}
+export type { InventoryItem }
 
 async function listInventory(householdId: string, untilDate?: string) {
   const supabase = await createClient()
@@ -44,7 +22,7 @@ async function listInventory(householdId: string, untilDate?: string) {
     return []
   }
 
-  return data.map(mapRow)
+  return data.map(mapInventoryItem)
 }
 
 export async function getHouseholdInventory(householdId: string) {
@@ -68,5 +46,5 @@ export async function getInventoryItem(householdId: string, itemId: string) {
     return null
   }
 
-  return mapRow(data)
+  return mapInventoryItem(data)
 }

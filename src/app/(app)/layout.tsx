@@ -20,7 +20,12 @@ export default async function AppLayout({
   }
 
   return (
-    <AppShell householdName={household.current.householdName}>
+    <AppShell
+      userId={userId}
+      householdId={household.current.householdId}
+      householdName={household.current.householdName}
+      role={household.current.role}
+    >
       {children}
     </AppShell>
   )

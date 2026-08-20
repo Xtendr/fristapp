@@ -1,6 +1,6 @@
 import { InventoryRow } from "@/components/inventory-row"
 import { classifyExpiry } from "@/lib/inventory/expiry"
-import type { InventoryItem } from "@/lib/inventory/queries"
+import type { InventoryItem } from "@/lib/inventory/item"
 
 const attentionOrder = ["expired", "today", "tomorrow", "soon"] as const
 
