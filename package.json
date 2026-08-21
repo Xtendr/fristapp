@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "db:push": "npx supabase db push",
     "test:expiry": "node --experimental-strip-types --test src/lib/inventory/expiry.test.ts",
+    "test:interaction": "node --experimental-strip-types --test src/lib/inventory/swipe.test.ts",
     "test:push": "node --experimental-strip-types --test src/lib/push/schedule.test.ts",
     "test:capture": "node --experimental-strip-types --test src/lib/capture/gtin.test.ts",
     "test:rls": "node scripts/prove-rls.mjs"

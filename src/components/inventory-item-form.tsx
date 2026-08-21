@@ -124,9 +124,14 @@ export function InventoryItemForm({
         return
       }
       const result = await updateInventoryItem(itemId, formData)
-      if (result?.error) {
+      if ("error" in result) {
         setError(result.error)
+        return
       }
+
+      session?.updateInventoryItem(result.item)
+      toast.success(`${result.item.displayName} updated.`)
+      session?.closeInventoryItem()
     })
   }
 
@@ -135,11 +140,32 @@ export function InventoryItemForm({
       return
     }
     setError(null)
+
+    const removedItem = {
+      id: itemId,
+      displayName: initialValues?.displayName ?? values.displayName,
+      expiryDate: initialValues?.expiryDate ?? values.expiryDate,
+      storageLocation:
+        initialValues?.storageLocation ?? values.storageLocation,
+      quantity: initialValues?.quantity ?? values.quantity,
+    }
+
+    session?.removeInventoryItem(itemId)
+    session?.closeInventoryItem()
+
     startTransition(async () => {
       const result = await deleteInventoryItem(itemId)
-      if (result?.error) {
-        setError(result.error)
+      if ("error" in result) {
+        session?.addInventoryItem(removedItem)
+        if (session) {
+          toast.error("The item could not be removed. It has been restored.")
+        } else {
+          setError(result.error)
+        }
+        return
       }
+
+      toast.success(`${removedItem.displayName} removed.`)
     })
   }
 

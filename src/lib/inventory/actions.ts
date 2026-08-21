@@ -1,8 +1,5 @@
 "use server"
 
-import { revalidatePath } from "next/cache"
-import { redirect } from "next/navigation"
-
 import { publicErrorMessage } from "@/lib/auth/errors"
 import { getSessionHousehold } from "@/lib/household/session"
 import { inventoryCreateContextSchema, parseInventoryForm } from "@/lib/inventory/schema"
@@ -17,12 +14,6 @@ async function requireReadyHousehold(): Promise<
     return { error: "Household is missing." }
   }
   return { householdId: session.household.current.householdId }
-}
-
-function revalidateInventory() {
-  revalidatePath("/", "layout")
-  revalidatePath("/inventory")
-  revalidatePath("/add")
 }
 
 export async function createInventoryItem(
@@ -75,7 +66,7 @@ export async function createInventoryItem(
 export async function updateInventoryItem(
   itemId: string,
   formData: FormData
-): Promise<{ error: string } | void> {
+): Promise<{ error: string } | { item: InventoryItem }> {
   const household = await requireReadyHousehold()
   if ("error" in household) {
     return household
@@ -89,7 +80,7 @@ export async function updateInventoryItem(
   }
 
   const supabase = await createClient()
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("inventory_items")
     .update({
       display_name: parsed.data.displayName,
@@ -99,34 +90,36 @@ export async function updateInventoryItem(
     })
     .eq("id", itemId)
     .eq("household_id", household.householdId)
+    .select("id, display_name, quantity, expiry_date, storage_location")
+    .single()
 
-  if (error) {
+  if (error || !data) {
     return { error: publicErrorMessage(error) }
   }
 
-  revalidateInventory()
-  redirect("/inventory")
+  return { item: mapInventoryItem(data) }
 }
 
 export async function deleteInventoryItem(
   itemId: string
-): Promise<{ error: string } | void> {
+): Promise<{ error: string } | { deleted: true }> {
   const household = await requireReadyHousehold()
   if ("error" in household) {
     return household
   }
 
   const supabase = await createClient()
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("inventory_items")
     .delete()
     .eq("id", itemId)
     .eq("household_id", household.householdId)
+    .select("id")
+    .single()
 
-  if (error) {
+  if (error || !data) {
     return { error: publicErrorMessage(error) }
   }
 
-  revalidateInventory()
-  redirect("/inventory")
+  return { deleted: true }
 }

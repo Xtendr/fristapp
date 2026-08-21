@@ -5,6 +5,7 @@ import { BottomNav } from "@/components/bottom-nav"
 import { HomeTab } from "@/components/home-tab"
 import { HouseholdTab } from "@/components/household-tab"
 import { InventoryTab } from "@/components/inventory-tab"
+import { InventoryItemDetail } from "@/components/inventory-item-detail"
 import { APP_NAME } from "@/lib/app"
 import type { AppTabHref } from "@/lib/app-tabs"
 import { AppSessionProvider, useAppSession } from "@/lib/app-session"
@@ -28,7 +29,8 @@ function TabPanel({
 }
 
 function AppShellFrame({ children }: { children: React.ReactNode }) {
-  const { householdName, clientTabs, activeTab } = useAppSession()
+  const { householdName, clientTabs, activeTab, selectedInventoryItem } =
+    useAppSession()
   const showClientTabs = clientTabs && activeTab !== null
 
   return (
@@ -40,18 +42,30 @@ function AppShellFrame({ children }: { children: React.ReactNode }) {
       <main className="flex-1 pb-24">
         {showClientTabs && activeTab ? (
           <>
-            <TabPanel href="/" active={activeTab}>
-              <HomeTab />
-            </TabPanel>
-            <TabPanel href="/inventory" active={activeTab}>
-              <InventoryTab />
-            </TabPanel>
-            <TabPanel href="/add" active={activeTab}>
-              <AddTab />
-            </TabPanel>
-            <TabPanel href="/household" active={activeTab}>
-              <HouseholdTab />
-            </TabPanel>
+            <div
+              hidden={selectedInventoryItem !== null}
+              inert={selectedInventoryItem !== null}
+              aria-hidden={selectedInventoryItem !== null}
+            >
+              <TabPanel href="/" active={activeTab}>
+                <HomeTab />
+              </TabPanel>
+              <TabPanel href="/inventory" active={activeTab}>
+                <InventoryTab />
+              </TabPanel>
+              <TabPanel href="/add" active={activeTab}>
+                <AddTab />
+              </TabPanel>
+              <TabPanel href="/household" active={activeTab}>
+                <HouseholdTab />
+              </TabPanel>
+            </div>
+            {selectedInventoryItem ? (
+              <InventoryItemDetail
+                key={selectedInventoryItem.id}
+                item={selectedInventoryItem}
+              />
+            ) : null}
           </>
         ) : (
           children

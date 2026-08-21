@@ -41,9 +41,9 @@ export function AttentionList({ items }: { items: InventoryItem[] }) {
       {sections.map((bucket) => (
         <section key={bucket} className="flex flex-col">
           <h2 className="mb-2 type-section">{attentionTitles[bucket]}</h2>
-          <ul className="flex flex-col rounded-xl border bg-card px-3">
+          <ul className="flex flex-col overflow-hidden rounded-xl border bg-card">
             {(grouped.get(bucket) ?? []).map((item) => (
-              <li key={item.id}>
+              <li key={item.id} className="border-b border-border last:border-b-0">
                 <InventoryRow item={item} />
               </li>
             ))}

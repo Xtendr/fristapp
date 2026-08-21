@@ -2,9 +2,11 @@
 
 import { useState } from "react"
 import { SearchIcon } from "lucide-react"
+import { toast } from "sonner"
 
 import { InventoryRow } from "@/components/inventory-row"
 import { useAppSession } from "@/lib/app-session"
+import { deleteInventoryItem } from "@/lib/inventory/actions"
 import type { InventoryItem } from "@/lib/inventory/item"
 import { cn } from "@/lib/utils"
 import type { StorageLocation } from "@/lib/supabase/database.types"
@@ -16,15 +18,36 @@ export function InventoryTab({
 }: {
   initialItems?: InventoryItem[]
 }) {
-  const { inventory, navigateTab } = useAppSession()
+  const {
+    inventory,
+    navigateTab,
+    openInventoryItem,
+    removeInventoryItem,
+    addInventoryItem,
+  } = useAppSession()
   const items = inventory ?? initialItems ?? []
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<Filter>("all")
+  const [revealedItemId, setRevealedItemId] = useState<string | null>(null)
   const normalizedQuery = query.trim().toLocaleLowerCase("da-DK")
   const visibleItems = items.filter((item) =>
     (filter === "all" || item.storageLocation === filter) &&
     (!normalizedQuery || item.displayName.toLocaleLowerCase("da-DK").includes(normalizedQuery))
   )
+
+  async function removeItem(item: InventoryItem) {
+    setRevealedItemId(null)
+    removeInventoryItem(item.id)
+
+    const result = await deleteInventoryItem(item.id)
+    if ("error" in result) {
+      addInventoryItem(item)
+      toast.error("The item could not be removed. It has been restored.")
+      return
+    }
+
+    toast.success(`${item.displayName} removed.`)
+  }
 
   return (
     <section className="flex flex-col gap-5 px-4 py-2">
@@ -50,10 +73,17 @@ export function InventoryTab({
       ) : visibleItems.length === 0 ? (
         <p className="type-body-secondary">No items match this search.</p>
       ) : (
-        <ul className="flex flex-col rounded-xl border bg-card px-3">
+        <ul className="flex flex-col overflow-hidden rounded-xl border bg-card">
           {visibleItems.map((item) => (
-            <li key={item.id}>
-              <InventoryRow item={item} />
+            <li key={item.id} className="border-b border-border last:border-b-0">
+              <InventoryRow
+                item={item}
+                revealed={revealedItemId === item.id}
+                onReveal={() => setRevealedItemId(item.id)}
+                onCloseReveal={() => setRevealedItemId(null)}
+                onOpen={() => openInventoryItem(item)}
+                onRemove={() => void removeItem(item)}
+              />
             </li>
           ))}
         </ul>
