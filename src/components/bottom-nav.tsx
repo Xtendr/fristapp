@@ -7,11 +7,6 @@ import { useAppSession } from "@/lib/app-session"
 import type { AppTabHref } from "@/lib/app-tabs"
 import { cn } from "@/lib/utils"
 
-/**
- * Provisional foundation navigation only.
- * Four tabs, including Add, are not a committed information architecture.
- * Add may become a central action instead of a destination once real flows exist.
- */
 const items = [
   { href: "/", label: "Home", icon: HouseIcon },
   { href: "/inventory", label: "Inventory", icon: PackageIcon },
@@ -31,7 +26,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-20 isolate border-t border-border bg-background"
+      className="fixed inset-x-0 bottom-0 z-20 isolate border-t border-border bg-background/95 backdrop-blur-md"
     >
       <ul className="mx-auto grid max-w-lg grid-cols-4 px-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {items.map((item) => {

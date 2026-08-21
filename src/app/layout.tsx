@@ -3,13 +3,14 @@ import { Geist } from "next/font/google"
 
 import { PwaRegister } from "@/components/pwa-register"
 import { APP_DESCRIPTION, APP_NAME } from "@/lib/app"
+import { APP_CANVAS_HEX } from "@/lib/theme"
 import { cn } from "@/lib/utils"
 
 import "./globals.css"
 
 const geist = Geist({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-geist",
 })
 
 export const metadata: Metadata = {
@@ -37,7 +38,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#fafafa",
+  themeColor: APP_CANVAS_HEX,
 }
 
 export default function RootLayout({

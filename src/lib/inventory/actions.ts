@@ -5,7 +5,7 @@ import { redirect } from "next/navigation"
 
 import { publicErrorMessage } from "@/lib/auth/errors"
 import { getSessionHousehold } from "@/lib/household/session"
-import { parseInventoryForm } from "@/lib/inventory/schema"
+import { inventoryCreateContextSchema, parseInventoryForm } from "@/lib/inventory/schema"
 import { createClient } from "@/lib/supabase/server"
 
 async function requireReadyHousehold(): Promise<
@@ -39,6 +39,14 @@ export async function createInventoryItem(
     }
   }
 
+  const context = inventoryCreateContextSchema.safeParse({
+    source: String(formData.get("source") ?? "manual"),
+    productId: formData.get("productId")
+      ? String(formData.get("productId"))
+      : null,
+  })
+  if (!context.success) return { error: "Capture information is invalid." }
+
   const supabase = await createClient()
   const { error } = await supabase.from("inventory_items").insert({
     household_id: household.householdId,
@@ -46,6 +54,8 @@ export async function createInventoryItem(
     expiry_date: parsed.data.expiryDate,
     storage_location: parsed.data.storageLocation,
     quantity: parsed.data.quantity,
+    source: context.data.source,
+    product_id: context.data.productId ?? null,
   })
 
   if (error) {

@@ -1,0 +1,25 @@
+-- Run after deploying capture-cleanup and setting CRON_SECRET.
+-- Reuses the project_url and cron_secret Vault entries created for push-dispatch.
+
+select cron.unschedule(jobid)
+from cron.job
+where jobname = 'capture-cleanup-hourly';
+
+select
+  cron.schedule(
+    'capture-cleanup-hourly',
+    '17 * * * *',
+    $$
+    select
+      net.http_post(
+        url := (select decrypted_secret from vault.decrypted_secrets where name = 'project_url')
+          || '/functions/v1/capture-cleanup',
+        headers := jsonb_build_object(
+          'Content-Type', 'application/json',
+          'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'cron_secret')
+        ),
+        body := '{}'::jsonb,
+        timeout_milliseconds := 50000
+      ) as request_id;
+    $$
+  );

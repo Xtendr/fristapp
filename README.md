@@ -4,15 +4,24 @@ Working name for a mobile-first household food inventory and expiry tracker.
 
 The product source of truth is [`FOOD_INVENTORY_PRODUCT_HANDOFF.md`](./FOOD_INVENTORY_PRODUCT_HANDOFF.md). This README covers the initialized codebase.
 
-## Current slice: Phase 2 (implementation in repo)
+## Current implementation state
 
-Web Push subscriptions, a scheduled `push-dispatch` Edge Function, and notification enablement UX.
+Phases 0–2 are complete. The scheduled iPhone path has been physically proven with the installed PWA fully closed:
 
-**Phase 2 is not complete until the real-device scheduler gate passes.** Automated lint/typecheck/build/RLS tests are necessary but not sufficient. The gate is:
+`pg_cron → pg_net → push-dispatch → Web Push → iPhone`
 
-`pg_cron → pg_net → push-dispatch → Web Push → closed installed PWA` on a Danish iPhone and on Android.
+The production hourly cron remains; the temporary proof cron was removed.
 
-Barcode, Open Food Facts, Mistral, AI, and batch capture remain unimplemented.
+Phases 3–6 are implemented in the repository and require migration/function deployment plus real-device validation before they can be called complete:
+
+- camera and still-image EAN/UPC scanning with local check-digit validation
+- service-only product cache with Open Food Facts fallback and user-confirmed mappings
+- private photo capture with client compression and Mistral-assisted proposals
+- explicit product/expiry image pairs for batch capture
+- mandatory review before AI/batch inventory changes
+- atomic, idempotent batch commit through `commit_capture_session`
+- scheduled cleanup function for expired capture images and sessions
+- manual fallback whenever AI is unconfigured or unavailable
 
 - Email and password auth. Confirm email is off for the private prototype.
 - Households are many-to-many via `household_members`. Current household is a cookie (`frist_household_id`), UX state only. RLS is the security boundary.
@@ -33,6 +42,7 @@ npm start
 npm run db:push
 npm run test:expiry
 npm run test:push
+npm run test:capture
 npm run test:rls
 ```
 
@@ -55,10 +65,9 @@ Edge Function / Vault only. Never `NEXT_PUBLIC_`. Never add these to Vercel:
 - `VAPID_SUBJECT` (`mailto:` contact)
 - `CRON_SECRET` (shared by `pg_cron` and `push-dispatch`)
 - `SUPABASE_SERVICE_ROLE_KEY` (injected on hosted Edge Functions)
-
-Unused:
-
-- `MISTRAL_API_KEY`, `MISTRAL_MODEL`
+- `MISTRAL_API_KEY` (omit it to guarantee zero AI spend and use manual fallback)
+- `MISTRAL_MODEL` (defaults to `mistral-small-2506`)
+- `OPEN_FOOD_FACTS_USER_AGENT` (identify Frist and include a real contact address)
 
 ## Supabase setup
 
@@ -88,15 +97,19 @@ npx supabase secrets set CRON_SECRET=<long-random-string>
 npx supabase secrets set VAPID_SUBJECT=mailto:you@example.com
 npx supabase secrets set VAPID_PRIVATE_KEY=<jwk-json>
 npx supabase functions deploy push-dispatch
+npx supabase functions deploy product-resolver
+npx supabase functions deploy analyze-capture
+npx supabase functions deploy capture-cleanup
 ```
 
-7. Store `project_url` and `cron_secret` in Vault, then apply the hourly schedule from [`supabase/cron/schedule_push_dispatch.sql.example`](supabase/cron/schedule_push_dispatch.sql.example).
+7. Store `project_url` and `cron_secret` in Vault, then apply the hourly notification schedule from [`supabase/cron/schedule_push_dispatch.sql.example`](supabase/cron/schedule_push_dispatch.sql.example). Apply the capture cleanup schedule from [`supabase/cron/schedule_capture_cleanup.sql.example`](supabase/cron/schedule_capture_cleanup.sql.example) only after its Edge Function is deployed.
 
 8. Run proofs:
 
 ```bash
 npm run test:expiry
 npm run test:push
+npm run test:capture
 npm run test:rls
 ```
 
@@ -124,16 +137,23 @@ For the closed-PWA gate:
 
 If the hosted Supabase project pauses after inactivity, `pg_cron` does not run and expiry notifications stop until the project resumes. That is acceptable for an active 2–3 person prototype. Do not add a paid keep-alive.
 
-## Intentionally not implemented
+## Still deferred
 
-- Barcode scanning and product lookup
-- Mistral / image capture
 - Notification preference settings
 - `profiles.active_household_id`
 - `expiry_type` in the UI (column exists, default `unknown`)
+- native application distribution
+- paid AI capacity or automatic paid retries
 
-Add remains a tab for now. Scan / photo / batch are not shown as fake modes.
+Add remains a mounted top-level tab with Scan, Photo, Batch, and Manual modes.
 
-## Next recommended slice
+## Required acceptance proof for capture
 
-Phase 3 (barcode) only after the iPhone + Android scheduled-push gate succeeds.
+After deploying the migration and functions, verify on real iPhone and Android hardware:
+
+1. camera permission, scan start/stop, EAN-8, EAN-13, UPC-A, still-image fallback
+2. internal product-cache hit, Open Food Facts hit, unknown product confirmation, offline/unavailable fallback
+3. private Storage access across two users/households
+4. Mistral success, missing-key fallback, invalid output, and rate-limit fallback
+5. paired batch review and all-or-nothing commit
+6. cleanup removes expired capture images without touching inventory

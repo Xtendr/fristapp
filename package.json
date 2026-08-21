@@ -11,12 +11,14 @@
     "db:push": "npx supabase db push",
     "test:expiry": "node --experimental-strip-types --test src/lib/inventory/expiry.test.ts",
     "test:push": "node --experimental-strip-types --test src/lib/push/schedule.test.ts",
+    "test:capture": "node --experimental-strip-types --test src/lib/capture/gtin.test.ts",
     "test:rls": "node scripts/prove-rls.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
+    "@zxing/browser": "^0.2.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.33.0",

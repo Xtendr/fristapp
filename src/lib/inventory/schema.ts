@@ -27,6 +27,11 @@ export const inventoryItemSchema = z.object({
     .max(99, "Quantity must be 99 or fewer."),
 })
 
+export const inventoryCreateContextSchema = z.object({
+  source: z.enum(["manual", "barcode"]).default("manual"),
+  productId: z.string().uuid().nullable().optional(),
+})
+
 export type InventoryItemInput = z.infer<typeof inventoryItemSchema>
 
 export function parseInventoryForm(formData: FormData) {

@@ -168,7 +168,7 @@ async function signUp(label) {
 }
 
 async function main() {
-  console.log("Phase 1A RLS proof (two users, publishable key only)\n")
+  console.log("Frist RLS proof (two users, publishable key only)\n")
   console.log(`Target: ${url}\n`)
 
   const userA = await signUp("a")
@@ -417,6 +417,118 @@ async function main() {
     assert(updated.data?.quantity === 2, "quantity was not updated")
     const removed = await a.from("inventory_items").delete().eq("id", itemA)
     assert(!removed.error, removed.error?.message ?? "delete failed")
+  })
+
+  let captureSessionA
+  let captureItemA
+  await check("A can create a capture session only in A", async () => {
+    const { data, error } = await a
+      .from("capture_sessions")
+      .insert({ household_id: houseA, mode: "photo" })
+      .select("id, created_by, household_id")
+      .single()
+    assert(!error && data, error?.message ?? "capture session insert failed")
+    assert(data.created_by === userA.userId, "capture creator was spoofed")
+    assert(data.household_id === houseA, "capture used the wrong household")
+    captureSessionA = data.id
+  })
+
+  await check("A cannot create a capture session in B", async () => {
+    const { error } = await a
+      .from("capture_sessions")
+      .insert({ household_id: houseB, mode: "photo" })
+    assert(error, "A created a capture session in B")
+  })
+
+  await check("B cannot read A capture sessions", async () => {
+    const { data, error } = await b
+      .from("capture_sessions")
+      .select("id")
+      .eq("id", captureSessionA)
+    assert(!error, error?.message ?? "cross-household capture select errored")
+    assert((data ?? []).length === 0, "B read A capture session")
+  })
+
+  await check("A can create an item in A capture session", async () => {
+    const { data, error } = await a
+      .from("capture_items")
+      .insert({ session_id: captureSessionA, position: 0 })
+      .select("id")
+      .single()
+    assert(!error && data, error?.message ?? "capture item insert failed")
+    captureItemA = data.id
+  })
+
+  await check("B cannot insert into A capture session", async () => {
+    const { error } = await b
+      .from("capture_items")
+      .insert({ session_id: captureSessionA, position: 1 })
+    assert(error, "B inserted into A capture session")
+  })
+
+  await check("clients cannot write AI proposals or session status", async () => {
+    const itemUpdate = await a
+      .from("capture_items")
+      .update({ proposal: { displayName: "Spoofed" } })
+      .eq("id", captureItemA)
+    assert(itemUpdate.error, "client wrote an AI proposal")
+    const sessionUpdate = await a
+      .from("capture_sessions")
+      .update({ status: "committed" })
+      .eq("id", captureSessionA)
+    assert(sessionUpdate.error, "client wrote capture session status")
+  })
+
+  await check("products are service-only", async () => {
+    const { data, error } = await a.from("products").select("id")
+    assert(error || (data ?? []).length === 0, "authenticated user read products directly")
+  })
+
+  const capturePath = `${userA.userId}/${captureSessionA}/${captureItemA}/rls.webp`
+  await check("capture images are private to their user path", async () => {
+    const uploaded = await a.storage
+      .from("capture-images")
+      .upload(capturePath, new Blob([new Uint8Array([82, 73, 70, 70])], { type: "image/webp" }))
+    assert(!uploaded.error, uploaded.error?.message ?? "capture upload failed")
+    const crossed = await b.storage.from("capture-images").download(capturePath)
+    assert(crossed.error, "B downloaded A capture image")
+    const removed = await a.storage.from("capture-images").remove([capturePath])
+    assert(!removed.error, removed.error?.message ?? "capture cleanup failed")
+  })
+
+  await check("A commits a complete capture atomically", async () => {
+    const committed = await a.rpc("commit_capture_session", {
+      p_session_id: captureSessionA,
+      p_confirmed_items: [{
+        captureItemId: captureItemA,
+        displayName: "Captured yoghurt",
+        expiryDate: "2026-08-27",
+        storageLocation: "fridge",
+        quantity: 1,
+        productId: null,
+      }],
+    })
+    assert(!committed.error, committed.error?.message ?? "capture commit failed")
+    assert(committed.data === 1, `expected one committed item, got ${committed.data}`)
+    const inventory = await a
+      .from("inventory_items")
+      .select("id, source, source_capture_item_id")
+      .eq("source_capture_item_id", captureItemA)
+      .single()
+    assert(!inventory.error && inventory.data, inventory.error?.message ?? "captured inventory missing")
+    assert(inventory.data.source === "ai", "photo capture source was not ai")
+    const repeated = await a.rpc("commit_capture_session", {
+      p_session_id: captureSessionA,
+      p_confirmed_items: [{
+        captureItemId: captureItemA,
+        displayName: "Duplicate",
+        expiryDate: "2026-08-27",
+        storageLocation: "fridge",
+        quantity: 1,
+      }],
+    })
+    assert(repeated.error, "capture session committed twice")
+    await a.from("inventory_items").delete().eq("id", inventory.data.id)
   })
 
   const endpointA = `https://push.example.com/frist-a-${suffix}`

@@ -37,11 +37,11 @@ export function AttentionList({ items }: { items: InventoryItem[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       {sections.map((bucket) => (
         <section key={bucket} className="flex flex-col">
-          <h2 className="text-sm font-medium">{attentionTitles[bucket]}</h2>
-          <ul className="flex flex-col">
+          <h2 className="mb-2 type-section">{attentionTitles[bucket]}</h2>
+          <ul className="flex flex-col rounded-xl border bg-card px-3">
             {(grouped.get(bucket) ?? []).map((item) => (
               <li key={item.id}>
                 <InventoryRow item={item} />

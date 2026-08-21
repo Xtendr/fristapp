@@ -12,13 +12,16 @@ import { cn } from "@/lib/utils"
 
 function expiryClass(bucket: ExpiryBucket) {
   if (bucket === "expired") {
-    return "text-[var(--status-expired)]"
+    return "text-status-expired"
   }
-  if (bucket === "today" || bucket === "tomorrow") {
-    return "text-[var(--status-urgent)]"
+  if (bucket === "today") {
+    return "text-status-today"
+  }
+  if (bucket === "tomorrow") {
+    return "text-status-tomorrow"
   }
   if (bucket === "soon") {
-    return "text-[var(--status-soon)]"
+    return "text-status-soon"
   }
   return "text-muted-foreground"
 }
@@ -29,13 +32,13 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
   return (
     <Link
       href={`/inventory/${item.id}/edit`}
-      className="flex items-baseline justify-between gap-3 border-b border-border py-3 text-sm"
+      className="flex items-center justify-between gap-3 border-b border-border py-3.5 text-sm last:border-b-0"
     >
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="truncate font-medium">
           {item.displayName}
           {item.quantity > 1 ? (
-            <span className="ml-1 font-normal text-muted-foreground">
+            <span className="ml-1 font-normal text-muted-foreground tabular-nums">
               ×{item.quantity}
             </span>
           ) : null}
@@ -48,7 +51,7 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
         <span className={cn("text-sm", expiryClass(bucket))}>
           {relativeExpiryLabel(item.expiryDate)}
         </span>
-        <span className="text-xs text-muted-foreground">
+        <span className="type-meta-num">
           {formatDisplayDate(item.expiryDate)}
         </span>
       </div>

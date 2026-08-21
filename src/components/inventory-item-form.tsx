@@ -18,17 +18,18 @@ import {
 import { useOptionalAppSession } from "@/lib/app-session"
 import { storageLabel } from "@/lib/inventory/expiry"
 import { storageLocations } from "@/lib/inventory/schema"
+import { confirmProduct } from "@/lib/capture/product-resolver"
 import type { StorageLocation } from "@/lib/supabase/database.types"
 import { cn } from "@/lib/utils"
 
-type FormValues = {
+export type InventoryFormValues = {
   displayName: string
   expiryDate: string
   storageLocation: StorageLocation
   quantity: number
 }
 
-const emptyCreateValues: FormValues = {
+const emptyCreateValues: InventoryFormValues = {
   displayName: "",
   expiryDate: "",
   storageLocation: "fridge",
@@ -39,12 +40,24 @@ export function InventoryItemForm({
   mode,
   itemId,
   initialValues,
+  captureContext,
+  submitLabel,
+  autoFocus = true,
+  onSaved,
 }: {
   mode: "create" | "edit"
   itemId?: string
-  initialValues?: FormValues
+  initialValues?: InventoryFormValues
+  captureContext?: {
+    source: "barcode"
+    productId?: string | null
+    gtin?: string | null
+  }
+  submitLabel?: string
+  autoFocus?: boolean
+  onSaved?: (name: string) => void
 }) {
-  const [values, setValues] = useState<FormValues>(
+  const [values, setValues] = useState<InventoryFormValues>(
     initialValues ?? emptyCreateValues
   )
   const [error, setError] = useState<string | null>(null)
@@ -62,12 +75,23 @@ export function InventoryItemForm({
 
     startTransition(async () => {
       if (mode === "create") {
+        formData.set("source", captureContext?.source ?? "manual")
+        let productId = captureContext?.productId ?? null
+        if (!productId && captureContext?.gtin && values.displayName.trim()) {
+          const confirmed = await confirmProduct(
+            captureContext.gtin,
+            values.displayName
+          )
+          productId = confirmed?.id ?? null
+        }
+        if (productId) formData.set("productId", productId)
         const result = await createInventoryItem(formData)
         if ("error" in result) {
           setError(result.error)
           return
         }
         setNotice(`Added ${result.added}`)
+        onSaved?.(result.added)
         setValues((current) => ({
           displayName: "",
           expiryDate: "",
@@ -129,7 +153,7 @@ export function InventoryItemForm({
               }))
             }
             autoComplete="off"
-            autoFocus={mode === "create"}
+            autoFocus={mode === "create" && autoFocus}
             maxLength={80}
             required
           />
@@ -201,7 +225,7 @@ export function InventoryItemForm({
           {pending
             ? "Saving"
             : mode === "create"
-              ? "Save"
+              ? submitLabel ?? "Save"
               : "Save changes"}
         </Button>
         {mode === "edit" ? (

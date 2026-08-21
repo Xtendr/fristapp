@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next"
 
 import { APP_DESCRIPTION, APP_NAME } from "@/lib/app"
+import { APP_CANVAS_HEX } from "@/lib/theme"
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -10,8 +11,8 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     start_url: "/",
     display: "standalone",
-    background_color: "#fafafa",
-    theme_color: "#fafafa",
+    background_color: APP_CANVAS_HEX,
+    theme_color: APP_CANVAS_HEX,
     icons: [
       {
         src: "/icons/icon-192.png",

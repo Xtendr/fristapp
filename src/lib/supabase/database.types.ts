@@ -8,6 +8,26 @@ export type ExpiryType = "best_before" | "use_by" | "unknown"
 
 export type InventorySource = "manual" | "barcode" | "ai" | "batch"
 
+export type ProductSource = "open_food_facts" | "user_confirmed"
+
+export type CaptureMode = "photo" | "batch"
+
+export type CaptureSessionStatus =
+  | "draft"
+  | "processing"
+  | "review"
+  | "committed"
+  | "cancelled"
+  | "expired"
+
+export type CaptureItemStatus =
+  | "draft"
+  | "uploaded"
+  | "processing"
+  | "review"
+  | "failed"
+  | "confirmed"
+
 export type Database = {
   public: {
     Tables: {
@@ -118,6 +138,8 @@ export type Database = {
           expiry_type: ExpiryType
           storage_location: StorageLocation
           source: InventorySource
+          product_id: string | null
+          source_capture_item_id: string | null
           added_by: string
           created_at: string
           updated_at: string
@@ -130,6 +152,8 @@ export type Database = {
           expiry_type?: ExpiryType
           storage_location: StorageLocation
           source?: InventorySource
+          product_id?: string | null
+          source_capture_item_id?: string | null
         }
         Update: {
           display_name?: string
@@ -137,8 +161,23 @@ export type Database = {
           expiry_date?: string
           expiry_type?: ExpiryType
           storage_location?: StorageLocation
+          product_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "inventory_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_source_capture_item_id_fkey"
+            columns: ["source_capture_item_id"]
+            isOneToOne: true
+            referencedRelation: "capture_items"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "inventory_items_household_id_fkey"
             columns: ["household_id"]
@@ -151,6 +190,112 @@ export type Database = {
             columns: ["added_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          id: string
+          gtin: string
+          display_name: string
+          brand: string | null
+          variant: string | null
+          package_size: string | null
+          image_url: string | null
+          locale: string | null
+          source: ProductSource
+          last_refreshed_at: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          gtin: string
+          display_name: string
+          brand?: string | null
+          variant?: string | null
+          package_size?: string | null
+          image_url?: string | null
+          locale?: string | null
+          source: ProductSource
+          last_refreshed_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          display_name?: string
+          brand?: string | null
+          variant?: string | null
+          package_size?: string | null
+          image_url?: string | null
+          locale?: string | null
+          source?: ProductSource
+          last_refreshed_at?: string
+        }
+        Relationships: []
+      }
+      capture_sessions: {
+        Row: {
+          id: string
+          household_id: string
+          created_by: string
+          mode: CaptureMode
+          status: CaptureSessionStatus
+          created_at: string
+          updated_at: string
+          expires_at: string
+          committed_at: string | null
+        }
+        Insert: {
+          id?: string
+          household_id: string
+          mode: CaptureMode
+        }
+        Update: {
+          status?: CaptureSessionStatus
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capture_sessions_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      capture_items: {
+        Row: {
+          id: string
+          session_id: string
+          position: number
+          product_image_path: string | null
+          expiry_image_path: string | null
+          status: CaptureItemStatus
+          proposal: unknown | null
+          confirmed_data: unknown | null
+          error_code: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          session_id: string
+          position: number
+          product_image_path?: string | null
+          expiry_image_path?: string | null
+        }
+        Update: {
+          product_image_path?: string | null
+          expiry_image_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capture_items_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "capture_sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -265,6 +410,10 @@ export type Database = {
       remove_member: {
         Args: { p_household_id: string; p_user_id: string }
         Returns: undefined
+      }
+      commit_capture_session: {
+        Args: { p_session_id: string; p_confirmed_items: unknown }
+        Returns: number
       }
     }
     Enums: {
