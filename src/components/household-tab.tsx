@@ -1,5 +1,7 @@
 "use client"
 
+import { ChevronDownIcon } from "lucide-react"
+
 import { InviteManager } from "@/components/invite-manager"
 import { NotificationEnablement } from "@/components/notification-enablement"
 import { RenameHouseholdForm } from "@/components/rename-household-form"
@@ -41,15 +43,19 @@ export function HouseholdTab({
       <div className="flex items-end justify-between gap-3">
         <div>
           <h1 className="type-display">{householdName}</h1>
-          <p className="mt-1 type-body-secondary">{memberRows.length} {memberRows.length === 1 ? "member" : "members"}</p>
+          <p className="mt-1 type-body-secondary">
+            {memberRows.length} {memberRows.length === 1 ? "member" : "members"} · {isOwner ? "Owner" : "Member"}
+          </p>
         </div>
-        <span className="type-meta">{isOwner ? "Owner" : "Member"}</span>
       </div>
 
       {isOwner ? (
-        <details className="rounded-xl border bg-card px-4 py-3">
-          <summary className="cursor-pointer list-none type-body">Rename household</summary>
-          <div className="pt-4">
+        <details className="group rounded-xl border bg-card px-4">
+          <summary className="flex min-h-14 cursor-pointer touch-manipulation list-none items-center justify-between gap-3 type-body">
+            Rename household
+            <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="pb-4 pt-1">
             <RenameHouseholdForm
               householdId={householdId}
               currentName={householdName}

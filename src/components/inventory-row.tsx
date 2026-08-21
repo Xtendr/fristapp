@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { ChevronRightIcon } from "lucide-react"
 
 import {
   classifyExpiry,
@@ -32,7 +33,7 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
   return (
     <Link
       href={`/inventory/${item.id}/edit`}
-      className="flex items-center justify-between gap-3 border-b border-border py-3.5 text-sm last:border-b-0"
+      className="group flex min-h-16 touch-manipulation items-center justify-between gap-3 border-b border-border py-3 text-sm transition-colors last:border-b-0 hover:bg-muted/60 active:bg-muted"
     >
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="truncate font-medium">
@@ -47,13 +48,16 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
           {storageLabel(item.storageLocation)}
         </span>
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-0.5">
-        <span className={cn("text-sm", expiryClass(bucket))}>
-          {relativeExpiryLabel(item.expiryDate)}
-        </span>
-        <span className="type-meta-num">
-          {formatDisplayDate(item.expiryDate)}
-        </span>
+      <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-col items-end gap-0.5">
+          <span className={cn("text-sm", expiryClass(bucket))}>
+            {relativeExpiryLabel(item.expiryDate)}
+          </span>
+          <span className="type-meta-num">
+            {formatDisplayDate(item.expiryDate)}
+          </span>
+        </div>
+        <ChevronRightIcon className="size-4 text-muted-foreground transition-transform group-active:translate-x-0.5" aria-hidden="true" />
       </div>
     </Link>
   )

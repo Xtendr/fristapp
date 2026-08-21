@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next"
 import { Geist } from "next/font/google"
 
 import { PwaRegister } from "@/components/pwa-register"
+import { Toaster } from "@/components/ui/sonner"
 import { APP_DESCRIPTION, APP_NAME } from "@/lib/app"
 import { APP_CANVAS_HEX } from "@/lib/theme"
 import { cn } from "@/lib/utils"
@@ -51,6 +52,7 @@ export default function RootLayout({
       <body>
         <PwaRegister />
         {children}
+        <Toaster position="top-center" />
       </body>
     </html>
   )

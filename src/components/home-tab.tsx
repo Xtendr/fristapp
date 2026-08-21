@@ -27,14 +27,16 @@ export function HomeTab({ initialItems }: { initialItems?: InventoryItem[] }) {
           <h1 className="type-display">Use first</h1>
           <p className="mt-1 capitalize type-meta">{today}</p>
         </div>
-        <p className="type-meta-num">{attentionCount} need attention</p>
+        <p className="type-meta-num">
+          {attentionCount} {attentionCount === 1 ? "item needs" : "items need"} attention
+        </p>
       </div>
       <NotificationEnablement variant="home" />
       <AttentionList items={items} />
       <button
         type="button"
         onClick={() => navigateTab("/inventory")}
-        className="text-left text-sm font-medium text-foreground underline-offset-4 hover:underline"
+        className="min-h-11 touch-manipulation text-left text-sm font-medium text-foreground underline-offset-4 hover:underline"
       >
         View all inventory →
       </button>

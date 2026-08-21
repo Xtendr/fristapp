@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
   const mistralKey = Deno.env.get("MISTRAL_API_KEY")
-  const model = Deno.env.get("MISTRAL_MODEL") ?? "mistral-small-2506"
+  const model = Deno.env.get("MISTRAL_MODEL") ?? "ministral-14b-2512"
   if (!supabaseUrl || !serviceRoleKey) {
     return json(503, { status: "unavailable", code: "capture_unavailable" })
   }

@@ -33,7 +33,7 @@ function AppShellFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col">
-      <header className="flex h-14 items-center justify-between gap-4 px-4 pt-[max(0.5rem,env(safe-area-inset-top))]">
+      <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 bg-background/95 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-md">
         <p className="text-sm font-semibold tracking-[-0.02em] lowercase">{APP_NAME}</p>
         <p className="max-w-[60%] truncate text-sm text-muted-foreground">{householdName}</p>
       </header>

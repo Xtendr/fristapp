@@ -6,6 +6,7 @@ import { redirect } from "next/navigation"
 import { publicErrorMessage } from "@/lib/auth/errors"
 import { getSessionHousehold } from "@/lib/household/session"
 import { inventoryCreateContextSchema, parseInventoryForm } from "@/lib/inventory/schema"
+import { mapInventoryItem, type InventoryItem } from "@/lib/inventory/item"
 import { createClient } from "@/lib/supabase/server"
 
 async function requireReadyHousehold(): Promise<
@@ -26,7 +27,7 @@ function revalidateInventory() {
 
 export async function createInventoryItem(
   formData: FormData
-): Promise<{ error: string } | { added: string }> {
+): Promise<{ error: string } | { item: InventoryItem }> {
   const household = await requireReadyHousehold()
   if ("error" in household) {
     return household
@@ -48,22 +49,27 @@ export async function createInventoryItem(
   if (!context.success) return { error: "Capture information is invalid." }
 
   const supabase = await createClient()
-  const { error } = await supabase.from("inventory_items").insert({
-    household_id: household.householdId,
-    display_name: parsed.data.displayName,
-    expiry_date: parsed.data.expiryDate,
-    storage_location: parsed.data.storageLocation,
-    quantity: parsed.data.quantity,
-    source: context.data.source,
-    product_id: context.data.productId ?? null,
-  })
+  const { data, error } = await supabase
+    .from("inventory_items")
+    .insert({
+      household_id: household.householdId,
+      display_name: parsed.data.displayName,
+      expiry_date: parsed.data.expiryDate,
+      storage_location: parsed.data.storageLocation,
+      quantity: parsed.data.quantity,
+      source: context.data.source,
+      product_id: context.data.productId ?? null,
+    })
+    .select("id, display_name, quantity, expiry_date, storage_location")
+    .single()
 
-  if (error) {
+  if (error || !data) {
     return { error: publicErrorMessage(error) }
   }
 
-  revalidateInventory()
-  return { added: parsed.data.displayName }
+  // The mounted tab shell owns the live inventory state. Returning the inserted
+  // row avoids both a full-layout RSC re-render and a second browser-side query.
+  return { item: mapInventoryItem(data) }
 }
 
 export async function updateInventoryItem(

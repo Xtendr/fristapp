@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react"
@@ -37,6 +38,7 @@ export type AppSessionValue = {
   members: HouseholdMember[] | null
   invites: HouseholdInvite[] | null
   setHouseholdName: (name: string) => void
+  addInventoryItem: (item: InventoryItem) => void
   refreshInventory: () => Promise<void>
   refreshHousehold: () => Promise<void>
   navigateTab: (href: AppTabHref) => void
@@ -107,6 +109,7 @@ export function AppSessionProvider({
   const [activeTab, setActiveTab] = useState<AppTabHref | null>(null)
   const [name, setHouseholdName] = useState(householdName)
   const [inventory, setInventory] = useState<InventoryItem[] | null>(null)
+  const inventoryVersion = useRef(0)
   const [members, setMembers] = useState<HouseholdMember[] | null>(null)
   const [invites, setInvites] = useState<HouseholdInvite[] | null>(null)
 
@@ -119,8 +122,20 @@ export function AppSessionProvider({
   }
 
   const refreshInventory = useCallback(async () => {
-    setInventory(await loadInventory(householdId))
+    const version = inventoryVersion.current
+    const items = await loadInventory(householdId)
+    if (version === inventoryVersion.current) setInventory(items)
   }, [householdId])
+
+  const addInventoryItem = useCallback((item: InventoryItem) => {
+    inventoryVersion.current += 1
+    setInventory((current) => {
+      const next = [...(current ?? []).filter((entry) => entry.id !== item.id), item]
+      return next.sort((left, right) =>
+        left.expiryDate.localeCompare(right.expiryDate)
+      )
+    })
+  }, [])
 
   const refreshHousehold = useCallback(async () => {
     const result = await loadHousehold(householdId, role)
@@ -160,8 +175,9 @@ export function AppSessionProvider({
 
   useEffect(() => {
     const household = householdId
+    const inventoryLoadVersion = inventoryVersion.current
     void loadInventory(household).then((items) => {
-      setInventory(items)
+      if (inventoryLoadVersion === inventoryVersion.current) setInventory(items)
     })
     void loadHousehold(household, role).then((result) => {
       setMembers(result.members)
@@ -181,6 +197,7 @@ export function AppSessionProvider({
       members,
       invites,
       setHouseholdName,
+      addInventoryItem,
       refreshInventory,
       refreshHousehold,
       navigateTab,
@@ -195,6 +212,7 @@ export function AppSessionProvider({
       inventory,
       members,
       invites,
+      addInventoryItem,
       refreshInventory,
       refreshHousehold,
       navigateTab,

@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import { CopyIcon, Share2Icon } from "lucide-react"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { FieldError } from "@/components/ui/field"
@@ -26,6 +28,33 @@ export function InviteManager({
   const [pending, startTransition] = useTransition()
 
   const active = invites.filter((invite) => !invite.revoked_at)
+
+  async function shareInvite() {
+    if (!freshUrl) return
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Join my Frist household", url: freshUrl })
+        return
+      }
+      await navigator.clipboard.writeText(freshUrl)
+      toast.success("Invite link copied.")
+    } catch (shareError) {
+      if (shareError instanceof DOMException && shareError.name === "AbortError") {
+        return
+      }
+      toast.error("Could not share the invite link.")
+    }
+  }
+
+  async function copyInvite() {
+    if (!freshUrl) return
+    try {
+      await navigator.clipboard.writeText(freshUrl)
+      toast.success("Invite link copied.")
+    } catch {
+      toast.error("Could not copy the invite link.")
+    }
+  }
 
   return (
     <section className="flex flex-col gap-3">
@@ -53,13 +82,24 @@ export function InviteManager({
         </Button>
       </div>
       <p className="text-sm leading-6 text-muted-foreground">
-        The full link is shown once when you create it. Share it in Messages or
-        WhatsApp. It stays valid for 7 days unless you revoke it.
+        Invite links work for 7 days and are shown once when created.
       </p>
       {freshUrl ? (
-        <p className="break-all rounded-lg border border-border px-3 py-2 text-sm">
-          {freshUrl}
-        </p>
+        <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+          <p className="break-all text-sm">{freshUrl}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void copyInvite()}
+            >
+              <CopyIcon data-icon="inline-start" />Copy
+            </Button>
+            <Button type="button" onClick={() => void shareInvite()}>
+              <Share2Icon data-icon="inline-start" />Share
+            </Button>
+          </div>
+        </div>
       ) : null}
       {active.length === 0 ? (
         <p className="text-sm text-muted-foreground">No active invites.</p>

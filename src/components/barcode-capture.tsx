@@ -6,6 +6,7 @@ import { CameraIcon, ImageIcon, RotateCcwIcon, ScanLineIcon } from "lucide-react
 import { InventoryItemForm } from "@/components/inventory-item-form"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
 import { normalizeGtin, type BarcodeKind } from "@/lib/capture/gtin"
 import { lookupProduct, type ResolvedProduct } from "@/lib/capture/product-resolver"
 import { cn } from "@/lib/utils"
@@ -120,7 +121,7 @@ export function BarcodeCapture() {
   const ready = state.status === "ready" ? state : null
   return (
     <div className="flex flex-col gap-4">
-      <div className="overflow-hidden rounded-xl border bg-card">
+      {!ready ? <div className="overflow-hidden rounded-xl border bg-card">
         {state.status === "scanning" ? (
           <div className="relative aspect-[4/3] bg-black">
             <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
@@ -136,25 +137,27 @@ export function BarcodeCapture() {
             </div>
           </div>
         )}
-      </div>
+      </div> : null}
 
       {ready ? (
-        <div className="flex items-center justify-between rounded-lg border bg-card px-3 py-2.5">
+        <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5">
           <div className="min-w-0">
             <p className="type-meta-num">{ready.gtin}</p>
             <p className="truncate type-body">{ready.product?.displayName ?? "New product"}</p>
           </div>
-          <Button type="button" variant="ghost" size="icon-sm" onClick={reset} aria-label="Scan another barcode"><RotateCcwIcon /></Button>
+          <Button type="button" variant="outline" size="sm" onClick={reset}>
+            <RotateCcwIcon data-icon="inline-start" />Scan again
+          </Button>
         </div>
       ) : null}
 
       {state.status === "idle" || state.status === "scanning" || state.status === "error" ? (
         <div className="grid grid-cols-2 gap-2">
           <Button type="button" variant={state.status === "scanning" ? "default" : "outline"} onClick={state.status === "scanning" ? stopAndReset : startScanner}>
-            <CameraIcon />{state.status === "scanning" ? "Stop" : "Use camera"}
+            <CameraIcon data-icon="inline-start" />{state.status === "scanning" ? "Stop" : "Use camera"}
           </Button>
           <label className={cn(buttonVariants({ variant: "outline" }), "cursor-pointer")}>
-            <ImageIcon />Barcode photo<input className="sr-only" type="file" accept="image/*" onChange={(event) => void scanImage(event.target.files?.[0] ?? null)} />
+            <ImageIcon data-icon="inline-start" />Barcode photo<input className="sr-only" type="file" accept="image/*" onChange={(event) => void scanImage(event.target.files?.[0] ?? null)} />
           </label>
         </div>
       ) : null}
@@ -166,7 +169,7 @@ export function BarcodeCapture() {
         </form>
       ) : null}
 
-      {state.status === "looking_up" ? <p className="type-body-secondary">Checking product…</p> : null}
+      {state.status === "looking_up" ? <p className="flex items-center gap-2 type-body-secondary"><Spinner />Checking product…</p> : null}
       {state.status === "error" ? <p className="text-sm text-destructive">{state.message}</p> : null}
       {ready?.lookupUnavailable ? <p className="type-meta">Online lookup is unavailable. You can still name and save this product.</p> : null}
 

@@ -27,19 +27,19 @@ export function InventoryTab({
   )
 
   return (
-    <section className="flex flex-col gap-6 px-4 py-2">
+    <section className="flex flex-col gap-5 px-4 py-2">
       <div className="flex items-end justify-between gap-3">
         <h1 className="type-display">Inventory</h1>
-        <p className="type-meta-num">{items.length} items</p>
+        <p className="type-meta-num">{items.length} {items.length === 1 ? "item" : "items"}</p>
       </div>
-      <label className="flex h-10 items-center gap-2 rounded-lg bg-muted px-3 text-muted-foreground">
+      <label className="flex h-11 items-center gap-2 rounded-lg bg-muted px-3 text-muted-foreground focus-within:ring-2 focus-within:ring-ring/30">
         <SearchIcon className="size-4" />
         <span className="sr-only">Search inventory</span>
         <input className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search inventory" />
       </label>
       <div className="flex gap-1" aria-label="Filter inventory by storage">
         {(["all", "fridge", "freezer", "pantry"] as const).map((value) => (
-          <button key={value} type="button" onClick={() => setFilter(value)} className={cn("rounded-lg px-2.5 py-1.5 text-sm capitalize text-muted-foreground", filter === value && "bg-primary text-primary-foreground")}>{value}</button>
+          <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={cn("min-h-11 touch-manipulation rounded-lg px-3 text-sm capitalize text-muted-foreground transition-colors hover:bg-muted", filter === value && "bg-primary text-primary-foreground hover:bg-primary")}>{value}</button>
         ))}
       </div>
       {items.length === 0 ? (

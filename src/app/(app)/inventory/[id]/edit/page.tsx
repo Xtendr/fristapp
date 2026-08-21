@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation"
+import Link from "next/link"
+import { ArrowLeftIcon } from "lucide-react"
 
 import { InventoryItemForm } from "@/components/inventory-item-form"
 import { getInventoryItem } from "@/lib/inventory/queries"
@@ -21,8 +23,13 @@ export default async function EditInventoryItemPage({
   }
 
   return (
-    <section className="flex flex-col gap-6 px-4 py-2">
-      <h1 className="text-lg font-medium tracking-tight">Edit item</h1>
+    <section className="flex flex-col gap-5 px-4 py-2">
+      <div className="flex flex-col gap-1">
+        <Link href="/inventory" className="flex min-h-11 w-fit touch-manipulation items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeftIcon className="size-4" aria-hidden="true" />Inventory
+        </Link>
+        <h1 className="type-display">Edit item</h1>
+      </div>
       <InventoryItemForm
         mode="edit"
         itemId={item.id}

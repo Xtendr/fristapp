@@ -1,16 +1,19 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
-import { CalendarDaysIcon, CameraIcon, ImagePlusIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import { useEffect, useMemo, useState, useTransition } from "react"
+import { CalendarDaysIcon, CameraIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
+import { ExpiryDateField } from "@/components/expiry-date-field"
+import { QuantityStepper } from "@/components/quantity-stepper"
+import { StorageLocationPicker } from "@/components/storage-location-picker"
 import { Button } from "@/components/ui/button"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
 import { commitCapture, discardCapture, loadPendingCapture, prepareCapture, type CaptureFiles, type PreparedCaptureItem } from "@/lib/capture/client"
 import { confirmedCaptureItemsSchema, type CaptureMode } from "@/lib/capture/schema"
 import { confirmProduct } from "@/lib/capture/product-resolver"
 import { useAppSession } from "@/lib/app-session"
-import { storageLabel } from "@/lib/inventory/expiry"
-import { storageLocations } from "@/lib/inventory/schema"
 import type { StorageLocation } from "@/lib/supabase/database.types"
 
 type ReviewItem = {
@@ -35,10 +38,31 @@ function CaptureFileButton({
   file: File | null
   onChange: (file: File | null) => void
 }) {
+  const preview = useMemo(
+    () => (file ? URL.createObjectURL(file) : null),
+    [file]
+  )
+
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview)
+    }
+  }, [preview])
+
   return (
-    <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border bg-background px-3 text-center transition-colors hover:bg-muted">
-      {file ? <ImagePlusIcon className="size-5" /> : <CameraIcon className="size-5 text-muted-foreground" />}
-      <span className="text-xs font-medium">{file ? file.name : label}</span>
+    <label className="relative flex min-h-28 cursor-pointer touch-manipulation flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border bg-background px-3 text-center transition-colors hover:bg-muted">
+      {preview ? (
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${preview})` }}
+        />
+      ) : (
+        <CameraIcon className="size-5 text-muted-foreground" />
+      )}
+      <span className={preview ? "relative rounded-md bg-background/90 px-2 py-1 text-xs font-medium backdrop-blur-sm" : "text-xs font-medium"}>
+        {preview ? `Replace ${label.toLowerCase()}` : label}
+      </span>
       <input
         className="sr-only"
         type="file"
@@ -169,29 +193,31 @@ export function PhotoCapture({ mode }: { mode: CaptureMode }) {
               {item.usedFallback ? <span className="rounded-full bg-muted px-2 py-1 type-meta">Manual review</span> : null}
             </div>
             {item.gtin ? <p className="mb-3 type-meta-num">Detected barcode {item.gtin}</p> : null}
-            <div className="flex flex-col gap-4">
-              <label className="flex flex-col gap-1.5 type-label">Name
-                <Input value={item.displayName} maxLength={80} onChange={(event) => setReview((current) => current.map((entry) => entry.id === item.id ? { ...entry, displayName: event.target.value } : entry))} />
-              </label>
-              <label className="flex flex-col gap-1.5 type-label">Expiry
-                <Input type="date" value={item.expiryDate} onChange={(event) => setReview((current) => current.map((entry) => entry.id === item.id ? { ...entry, expiryDate: event.target.value } : entry))} />
-              </label>
-              <div>
-                <p className="mb-1.5 type-label">Storage</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {storageLocations.map((location) => (
-                    <Button key={location} type="button" size="sm" variant={item.storageLocation === location ? "default" : "outline"} onClick={() => setReview((current) => current.map((entry) => entry.id === item.id ? { ...entry, storageLocation: location } : entry))}>{storageLabel(location)}</Button>
-                  ))}
-                </div>
-              </div>
-              <label className="flex flex-col gap-1.5 type-label">Quantity
-                <Input type="number" min={1} max={99} value={item.quantity} onChange={(event) => setReview((current) => current.map((entry) => entry.id === item.id ? { ...entry, quantity: Number(event.target.value) } : entry))} />
-              </label>
-            </div>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor={`capture-name-${item.id}`}>Name</FieldLabel>
+                <Input id={`capture-name-${item.id}`} value={item.displayName} maxLength={80} onChange={(event) => setReview((current) => current.map((entry) => entry.id === item.id ? { ...entry, displayName: event.target.value } : entry))} />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={`capture-expiry-${item.id}`}>Expiry</FieldLabel>
+                <ExpiryDateField id={`capture-expiry-${item.id}`} name={`capture-expiry-${item.id}`} value={item.expiryDate} onChange={(expiryDate) => setReview((current) => current.map((entry) => entry.id === item.id ? { ...entry, expiryDate } : entry))} />
+              </Field>
+              <Field>
+                <FieldLabel>Storage</FieldLabel>
+                <StorageLocationPicker name={`capture-storage-${item.id}`} value={item.storageLocation} onChange={(storageLocation) => setReview((current) => current.map((entry) => entry.id === item.id ? { ...entry, storageLocation } : entry))} />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={`capture-quantity-${item.id}`}>Quantity</FieldLabel>
+                <QuantityStepper id={`capture-quantity-${item.id}`} name={`capture-quantity-${item.id}`} value={item.quantity} onChange={(quantity) => setReview((current) => current.map((entry) => entry.id === item.id ? { ...entry, quantity } : entry))} />
+              </Field>
+            </FieldGroup>
           </div>
         ))}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <Button type="button" size="lg" disabled={pending} onClick={save}>{pending ? "Saving…" : `Save ${review.length === 1 ? "item" : `${review.length} items`}`}</Button>
+        <Button type="button" size="lg" disabled={pending} onClick={save}>
+          {pending ? <Spinner data-icon="inline-start" /> : null}
+          {pending ? "Saving…" : `Save ${review.length === 1 ? "item" : `${review.length} items`}`}
+        </Button>
         <Button type="button" variant="ghost" disabled={pending} onClick={discard}>Discard capture</Button>
       </div>
     )
@@ -201,7 +227,7 @@ export function PhotoCapture({ mode }: { mode: CaptureMode }) {
     <div className="flex flex-col gap-4">
       <div>
         <h2 className="type-title">{mode === "photo" ? "Capture one item" : "Capture a batch"}</h2>
-        <p className="mt-1 type-body-secondary">{mode === "photo" ? "Photograph the product and its expiry label." : "Keep each product paired with its own expiry photo."}</p>
+        <p className="mt-1 type-body-secondary">{mode === "photo" ? "Add a product photo, an expiry photo, or both." : "Keep every product paired with its own expiry photo."}</p>
       </div>
 
       {rows.map((row, index) => (
@@ -225,9 +251,10 @@ export function PhotoCapture({ mode }: { mode: CaptureMode }) {
       {notice ? <p className="rounded-lg border bg-card p-3 type-body">{notice}</p> : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <Button type="button" size="lg" disabled={pending || !rows.some((row) => row.product || row.expiry)} onClick={analyze}>
-        <CalendarDaysIcon />{pending ? "Preparing review…" : mode === "photo" ? "Review item" : "Review batch"}
+        {pending ? <Spinner data-icon="inline-start" /> : <CalendarDaysIcon data-icon="inline-start" />}
+        {pending ? "Uploading and analyzing…" : mode === "photo" ? "Review item" : "Review batch"}
       </Button>
-      <p className="type-meta">Photos are private. If AI is unavailable, Frist opens the same review form for manual entry.</p>
+      <p className="type-meta">Photos stay private to your household. Frist fills what it can; you review every item before anything is saved.</p>
     </div>
   )
 }
