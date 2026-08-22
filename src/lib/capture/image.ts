@@ -1,5 +1,7 @@
-const MAX_EDGE = 1600
-const MAX_BYTES = 2 * 1024 * 1024
+const LIMITS = {
+  product: { maxEdge: 1600, maxBytes: 2 * 1024 * 1024 },
+  expiry: { maxEdge: 2400, maxBytes: 4 * 1024 * 1024 },
+} as const
 
 async function canvasBlob(
   canvas: HTMLCanvasElement,
@@ -9,11 +11,15 @@ async function canvasBlob(
   return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality))
 }
 
-export async function prepareCaptureImage(file: File): Promise<Blob> {
+export async function prepareCaptureImage(
+  file: File,
+  kind: "product" | "expiry"
+): Promise<Blob> {
   if (!file.type.startsWith("image/")) throw new Error("Choose an image file.")
 
   const bitmap = await createImageBitmap(file)
-  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height))
+  const limit = LIMITS[kind]
+  const scale = Math.min(1, limit.maxEdge / Math.max(bitmap.width, bitmap.height))
   const canvas = document.createElement("canvas")
   canvas.width = Math.max(1, Math.round(bitmap.width * scale))
   canvas.height = Math.max(1, Math.round(bitmap.height * scale))
@@ -28,7 +34,7 @@ export async function prepareCaptureImage(file: File): Promise<Blob> {
   for (const type of ["image/webp", "image/jpeg"] as const) {
     for (const quality of [0.84, 0.72, 0.6, 0.48]) {
       const blob = await canvasBlob(canvas, type, quality)
-      if (blob && blob.size <= MAX_BYTES) return blob
+      if (blob && blob.size <= limit.maxBytes) return blob
     }
   }
 

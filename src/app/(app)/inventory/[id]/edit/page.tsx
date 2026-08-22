@@ -36,8 +36,10 @@ export default async function EditInventoryItemPage({
         initialValues={{
           displayName: item.displayName,
           expiryDate: item.expiryDate,
+          expiryType: item.expiryType ?? "unknown",
           storageLocation: item.storageLocation,
           quantity: item.quantity,
+          categoryId: item.category?.id ?? "",
         }}
       />
     </section>

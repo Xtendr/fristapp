@@ -28,6 +28,30 @@ export type CaptureItemStatus =
   | "failed"
   | "confirmed"
 
+export type CategorySystemKey =
+  | "dairy_eggs"
+  | "fruit_vegetables"
+  | "meat_fish"
+  | "bread_bakery"
+  | "meals_leftovers"
+  | "drinks"
+  | "pantry_staples"
+  | "condiments"
+  | "snacks"
+  | "other"
+
+export type CategoryIconKey =
+  | "milk"
+  | "apple"
+  | "drumstick"
+  | "wheat"
+  | "utensils"
+  | "cup"
+  | "package"
+  | "bottle"
+  | "cookie"
+  | "shapes"
+
 export type Database = {
   public: {
     Tables: {
@@ -128,6 +152,82 @@ export type Database = {
           },
         ]
       }
+      household_categories: {
+        Row: {
+          id: string
+          household_id: string
+          name: string
+          system_key: CategorySystemKey | null
+          icon_key: CategoryIconKey
+          sort_order: number
+          archived_at: string | null
+          created_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          household_id: string
+          name: string
+          system_key?: CategorySystemKey | null
+          icon_key: CategoryIconKey
+          sort_order?: number
+        }
+        Update: {
+          name?: string
+          icon_key?: CategoryIconKey
+          sort_order?: number
+          archived_at?: string | null
+        }
+        Relationships: []
+      }
+      household_product_preferences: {
+        Row: {
+          household_id: string
+          product_id: string
+          preferred_category_id: string
+          usual_storage_location: StorageLocation
+          last_confirmed_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          household_id: string
+          product_id: string
+          preferred_category_id: string
+          usual_storage_location: StorageLocation
+        }
+        Update: {
+          preferred_category_id?: string
+          usual_storage_location?: StorageLocation
+        }
+        Relationships: []
+      }
+      household_notification_preferences: {
+        Row: {
+          household_id: string
+          user_id: string
+          household_reminders_enabled: boolean
+          remind_three_days_before: boolean
+          remind_one_day_before: boolean
+          remind_on_expiry: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          household_id: string
+          household_reminders_enabled?: boolean
+          remind_three_days_before?: boolean
+          remind_one_day_before?: boolean
+          remind_on_expiry?: boolean
+        }
+        Update: {
+          household_reminders_enabled?: boolean
+          remind_three_days_before?: boolean
+          remind_one_day_before?: boolean
+          remind_on_expiry?: boolean
+        }
+        Relationships: []
+      }
       inventory_items: {
         Row: {
           id: string
@@ -140,6 +240,7 @@ export type Database = {
           source: InventorySource
           product_id: string | null
           source_capture_item_id: string | null
+          category_id: string
           added_by: string
           created_at: string
           updated_at: string
@@ -154,6 +255,7 @@ export type Database = {
           source?: InventorySource
           product_id?: string | null
           source_capture_item_id?: string | null
+          category_id?: string
         }
         Update: {
           display_name?: string
@@ -162,8 +264,16 @@ export type Database = {
           expiry_type?: ExpiryType
           storage_location?: StorageLocation
           product_id?: string | null
+          category_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "inventory_items_category_household_fkey"
+            columns: ["category_id", "household_id"]
+            isOneToOne: false
+            referencedRelation: "household_categories"
+            referencedColumns: ["id", "household_id"]
+          },
           {
             foreignKeyName: "inventory_items_product_id_fkey"
             columns: ["product_id"]
@@ -204,6 +314,7 @@ export type Database = {
           package_size: string | null
           image_url: string | null
           locale: string | null
+          category_key: CategorySystemKey | null
           source: ProductSource
           last_refreshed_at: string
           created_at: string
@@ -218,6 +329,7 @@ export type Database = {
           package_size?: string | null
           image_url?: string | null
           locale?: string | null
+          category_key?: CategorySystemKey | null
           source: ProductSource
           last_refreshed_at?: string
           created_at?: string
@@ -230,6 +342,7 @@ export type Database = {
           package_size?: string | null
           image_url?: string | null
           locale?: string | null
+          category_key?: CategorySystemKey | null
           source?: ProductSource
           last_refreshed_at?: string
         }
@@ -276,6 +389,8 @@ export type Database = {
           proposal: unknown | null
           confirmed_data: unknown | null
           error_code: string | null
+          analysis_metadata: unknown | null
+          images_deleted_at: string | null
           created_at: string
           updated_at: string
         }
@@ -414,6 +529,52 @@ export type Database = {
       commit_capture_session: {
         Args: { p_session_id: string; p_confirmed_items: unknown }
         Returns: number
+      }
+      create_household_category: {
+        Args: { p_household_id: string; p_name: string; p_icon_key: CategoryIconKey }
+        Returns: string
+      }
+      update_household_category: {
+        Args: { p_category_id: string; p_name: string; p_icon_key: CategoryIconKey }
+        Returns: undefined
+      }
+      reorder_household_categories: {
+        Args: { p_household_id: string; p_category_ids: string[] }
+        Returns: undefined
+      }
+      archive_household_category: {
+        Args: { p_category_id: string }
+        Returns: number
+      }
+      remember_product_preference: {
+        Args: {
+          p_household_id: string
+          p_product_id: string
+          p_category_id: string
+          p_storage_location: StorageLocation
+        }
+        Returns: undefined
+      }
+      apply_category_assignments: {
+        Args: { p_household_id: string; p_assignments: unknown }
+        Returns: number
+      }
+      commit_capture_session_v2: {
+        Args: { p_session_id: string; p_confirmed_items: unknown }
+        Returns: {
+          id: string
+          display_name: string
+          quantity: number
+          expiry_date: string
+          expiry_type: ExpiryType
+          storage_location: StorageLocation
+          product_id: string | null
+          category_id: string
+          category_name: string
+          category_icon_key: CategoryIconKey
+          added_by: string
+          added_by_name: string
+        }[]
       }
     }
     Enums: {

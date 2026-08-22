@@ -31,10 +31,13 @@ export function InventoryItemDetail({ item }: { item: InventoryItem }) {
         initialValues={{
           displayName: item.displayName,
           expiryDate: item.expiryDate,
+          expiryType: item.expiryType ?? "unknown",
           storageLocation: item.storageLocation,
           quantity: item.quantity,
+          categoryId: item.category?.id ?? "",
         }}
       />
+      <p className="type-meta px-1">Added by {item.addedBy?.name ?? "Household member"}</p>
     </section>
   )
 }

@@ -13,6 +13,10 @@ import {
 import { usePathname } from "next/navigation"
 
 import { isAppTabHref, type AppTabHref } from "@/lib/app-tabs"
+import {
+  mapHouseholdCategory,
+  type HouseholdCategory,
+} from "@/lib/categories/types"
 import { mapInventoryItem, type InventoryItem } from "@/lib/inventory/item"
 import { createClient } from "@/lib/supabase/client"
 import type { HouseholdRole } from "@/lib/supabase/database.types"
@@ -29,6 +33,19 @@ export type HouseholdInvite = {
   revoked_at: string | null
 }
 
+export type SessionMembership = {
+  householdId: string
+  householdName: string
+  role: HouseholdRole
+}
+
+export type NotificationPreferences = {
+  householdRemindersEnabled: boolean
+  remindThreeDaysBefore: boolean
+  remindOneDayBefore: boolean
+  remindOnExpiry: boolean
+}
+
 export type AppSessionValue = {
   userId: string
   householdId: string
@@ -37,12 +54,17 @@ export type AppSessionValue = {
   inventory: InventoryItem[] | null
   members: HouseholdMember[] | null
   invites: HouseholdInvite[] | null
+  memberships: SessionMembership[] | null
+  categories: HouseholdCategory[] | null
+  notificationPreferences: NotificationPreferences | null
   setHouseholdName: (name: string) => void
   addInventoryItem: (item: InventoryItem) => void
   updateInventoryItem: (item: InventoryItem) => void
   removeInventoryItem: (itemId: string) => void
   refreshInventory: () => Promise<void>
   refreshHousehold: () => Promise<void>
+  refreshCategories: () => Promise<void>
+  setNotificationPreferences: (preferences: NotificationPreferences) => void
   selectedInventoryItem: InventoryItem | null
   openInventoryItem: (item: InventoryItem) => void
   closeInventoryItem: () => void
@@ -62,7 +84,7 @@ async function loadInventory(householdId: string): Promise<InventoryItem[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from("inventory_items")
-    .select("id, display_name, quantity, expiry_date, storage_location")
+    .select("id, display_name, quantity, expiry_date, expiry_type, storage_location, product_id, category_id, household_categories(name, icon_key), added_by, profiles!inventory_items_added_by_fkey(display_name)")
     .eq("household_id", householdId)
     .order("expiry_date", { ascending: true })
     .order("created_at", { ascending: true })
@@ -71,16 +93,47 @@ async function loadInventory(householdId: string): Promise<InventoryItem[]> {
     return []
   }
 
-  return data.map(mapInventoryItem)
+  return data.map((row) => mapInventoryItem(row as Parameters<typeof mapInventoryItem>[0]))
+}
+
+async function loadCategories(householdId: string): Promise<HouseholdCategory[]> {
+  const supabase = createClient()
+  const { data } = await supabase
+    .from("household_categories")
+    .select("id, name, system_key, icon_key, sort_order, archived_at")
+    .eq("household_id", householdId)
+    .is("archived_at", null)
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true })
+
+  return (data ?? []).map(mapHouseholdCategory)
+}
+
+async function loadNotificationPreferences(
+  householdId: string
+): Promise<NotificationPreferences> {
+  const supabase = createClient()
+  const { data } = await supabase
+    .from("household_notification_preferences")
+    .select("household_reminders_enabled, remind_three_days_before, remind_one_day_before, remind_on_expiry")
+    .eq("household_id", householdId)
+    .maybeSingle()
+
+  return {
+    householdRemindersEnabled: data?.household_reminders_enabled ?? true,
+    remindThreeDaysBefore: data?.remind_three_days_before ?? true,
+    remindOneDayBefore: data?.remind_one_day_before ?? true,
+    remindOnExpiry: data?.remind_on_expiry ?? true,
+  }
 }
 
 async function loadHousehold(
   householdId: string,
   role: HouseholdRole
-): Promise<{ members: HouseholdMember[]; invites: HouseholdInvite[] }> {
+): Promise<{ members: HouseholdMember[]; invites: HouseholdInvite[]; memberships: SessionMembership[] }> {
   const supabase = createClient()
   const isOwner = role === "owner"
-  const [membersResult, invitesResult] = await Promise.all([
+  const [membersResult, invitesResult, membershipsResult] = await Promise.all([
     supabase
       .from("household_members")
       .select("user_id, role, joined_at, profiles(display_name)")
@@ -93,11 +146,19 @@ async function loadHousehold(
           .eq("household_id", householdId)
           .order("expires_at", { ascending: false })
       : Promise.resolve({ data: [] as HouseholdInvite[] }),
+    supabase
+      .from("household_members")
+      .select("household_id, role, households(name)")
+      .order("joined_at", { ascending: true }),
   ])
 
   return {
     members: (membersResult.data ?? []) as HouseholdMember[],
     invites: (invitesResult.data ?? []) as HouseholdInvite[],
+    memberships: (membershipsResult.data ?? []).flatMap((membership) => {
+      const household = Array.isArray(membership.households) ? membership.households[0] : membership.households
+      return household?.name ? [{ householdId: membership.household_id, householdName: household.name, role: membership.role }] : []
+    }),
   }
 }
 
@@ -127,6 +188,10 @@ export function AppSessionProvider({
   const selectedInventoryOriginRef = useRef<AppTabHref>("/inventory")
   const [members, setMembers] = useState<HouseholdMember[] | null>(null)
   const [invites, setInvites] = useState<HouseholdInvite[] | null>(null)
+  const [memberships, setMemberships] = useState<SessionMembership[] | null>(null)
+  const [categories, setCategories] = useState<HouseholdCategory[] | null>(null)
+  const [notificationPreferences, setNotificationPreferences] =
+    useState<NotificationPreferences | null>(null)
 
   if (
     pendingTab === null &&
@@ -188,7 +253,12 @@ export function AppSessionProvider({
     const result = await loadHousehold(householdId, role)
     setMembers(result.members)
     setInvites(result.invites)
+    setMemberships(result.memberships)
   }, [householdId, role])
+
+  const refreshCategories = useCallback(async () => {
+    setCategories(await loadCategories(householdId))
+  }, [householdId])
 
   const openInventoryItem = useCallback(
     (item: InventoryItem) => {
@@ -280,8 +350,28 @@ export function AppSessionProvider({
     void loadHousehold(household, role).then((result) => {
       setMembers(result.members)
       setInvites(result.invites)
+      setMemberships(result.memberships)
     })
+    void loadCategories(household).then(setCategories)
+    void loadNotificationPreferences(household).then(setNotificationPreferences)
   }, [householdId, role])
+
+  useEffect(() => {
+    const refreshVisibleData = () => {
+      if (document.visibilityState !== "visible") return
+      void refreshInventory()
+      void refreshHousehold()
+      void refreshCategories()
+      void loadNotificationPreferences(householdId).then(setNotificationPreferences)
+    }
+
+    document.addEventListener("visibilitychange", refreshVisibleData)
+    window.addEventListener("focus", refreshVisibleData)
+    return () => {
+      document.removeEventListener("visibilitychange", refreshVisibleData)
+      window.removeEventListener("focus", refreshVisibleData)
+    }
+  }, [householdId, refreshCategories, refreshHousehold, refreshInventory])
 
   const clientTabs = activeTab !== null
 
@@ -294,12 +384,17 @@ export function AppSessionProvider({
       inventory,
       members,
       invites,
+      memberships,
+      categories,
+      notificationPreferences,
       setHouseholdName,
       addInventoryItem,
       updateInventoryItem,
       removeInventoryItem,
       refreshInventory,
       refreshHousehold,
+      refreshCategories,
+      setNotificationPreferences,
       selectedInventoryItem,
       openInventoryItem,
       closeInventoryItem,
@@ -315,11 +410,15 @@ export function AppSessionProvider({
       inventory,
       members,
       invites,
+      memberships,
+      categories,
+      notificationPreferences,
       addInventoryItem,
       updateInventoryItem,
       removeInventoryItem,
       refreshInventory,
       refreshHousehold,
+      refreshCategories,
       selectedInventoryItem,
       openInventoryItem,
       closeInventoryItem,

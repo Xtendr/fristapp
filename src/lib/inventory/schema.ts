@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { isRealCalendarDay } from "@/lib/inventory/expiry"
+import { isRealCalendarDay } from "./expiry.ts"
 
 export const storageLocations = ["fridge", "freezer", "pantry"] as const
 
@@ -25,6 +25,8 @@ export const inventoryItemSchema = z.object({
     .int("Quantity must be a whole number.")
     .min(1, "Quantity must be at least 1.")
     .max(99, "Quantity must be 99 or fewer."),
+  expiryType: z.enum(["best_before", "use_by", "unknown"]).default("unknown"),
+  categoryId: z.string().uuid("Choose a category."),
 })
 
 export const inventoryCreateContextSchema = z.object({
@@ -40,5 +42,7 @@ export function parseInventoryForm(formData: FormData) {
     expiryDate: String(formData.get("expiryDate") ?? ""),
     storageLocation: String(formData.get("storageLocation") ?? ""),
     quantity: String(formData.get("quantity") ?? "1"),
+    expiryType: String(formData.get("expiryType") ?? "unknown"),
+    categoryId: String(formData.get("categoryId") ?? ""),
   })
 }

@@ -190,6 +190,66 @@ async function main() {
     throw new Error(`B create_household failed: ${houseBError?.message}`)
   }
 
+  let otherCategoryA
+  let otherCategoryB
+  let customCategoryA
+
+  await check("new households receive protected default categories", async () => {
+    const [categoriesA, categoriesB] = await Promise.all([
+      a.from("household_categories").select("id, system_key").eq("household_id", houseA),
+      b.from("household_categories").select("id, system_key").eq("household_id", houseB),
+    ])
+    assert(!categoriesA.error, categoriesA.error?.message ?? "A category select failed")
+    assert(!categoriesB.error, categoriesB.error?.message ?? "B category select failed")
+    assert(categoriesA.data?.length === 10, `expected 10 A categories, got ${categoriesA.data?.length}`)
+    assert(categoriesB.data?.length === 10, `expected 10 B categories, got ${categoriesB.data?.length}`)
+    otherCategoryA = categoriesA.data.find((row) => row.system_key === "other")?.id
+    otherCategoryB = categoriesB.data.find((row) => row.system_key === "other")?.id
+    assert(otherCategoryA && otherCategoryB, "a household is missing Other")
+  })
+
+  await check("A cannot read Household B categories", async () => {
+    const { data, error } = await a
+      .from("household_categories")
+      .select("id")
+      .eq("household_id", houseB)
+    assert(!error, error?.message ?? "cross-household category select errored")
+    assert((data ?? []).length === 0, "A saw Household B categories")
+  })
+
+  await check("direct category writes are denied", async () => {
+    const { error } = await a.from("household_categories").insert({
+      household_id: houseA,
+      name: "Direct write",
+      icon_key: "shapes",
+    })
+    assert(error, "direct category insert unexpectedly succeeded")
+  })
+
+  await check("owner can create a household category via RPC", async () => {
+    const { data, error } = await a.rpc("create_household_category", {
+      p_household_id: houseA,
+      p_name: "Breakfast",
+      p_icon_key: "wheat",
+    })
+    assert(!error && data, error?.message ?? "owner category creation failed")
+    customCategoryA = data
+  })
+
+  await check("notification preferences are private to their user", async () => {
+    const own = await a
+      .from("household_notification_preferences")
+      .select("household_id, user_id")
+    assert(!own.error, own.error?.message ?? "own notification preference select failed")
+    assert(own.data?.length === 1 && own.data[0].user_id === userA.userId, "A did not see exactly A's preference")
+    const crossed = await a
+      .from("household_notification_preferences")
+      .select("user_id")
+      .eq("household_id", houseB)
+    assert(!crossed.error, crossed.error?.message ?? "private preference select errored")
+    assert((crossed.data ?? []).length === 0, "A saw B's notification preference")
+  })
+
   await check("A selects only household A", async () => {
     const { data, error } = await a.from("households").select("id")
     assert(!error, error?.message ?? "select failed")
@@ -356,6 +416,17 @@ async function main() {
     assert(error, "A inserted inventory into B")
   })
 
+  await check("an item cannot use another household's category", async () => {
+    const { error } = await a.from("inventory_items").insert({
+      household_id: houseA,
+      display_name: "Wrong category",
+      expiry_date: "2026-08-25",
+      storage_location: "fridge",
+      category_id: otherCategoryB,
+    })
+    assert(error, "cross-household category assignment unexpectedly succeeded")
+  })
+
   await check("A cannot update Household B inventory", async () => {
     const { data, error } = await a
       .from("inventory_items")
@@ -496,20 +567,23 @@ async function main() {
     assert(!removed.error, removed.error?.message ?? "capture cleanup failed")
   })
 
-  await check("A commits a complete capture atomically", async () => {
-    const committed = await a.rpc("commit_capture_session", {
+  await check("A commits a complete capture and receives inserted rows", async () => {
+    const committed = await a.rpc("commit_capture_session_v2", {
       p_session_id: captureSessionA,
       p_confirmed_items: [{
         captureItemId: captureItemA,
         displayName: "Captured yoghurt",
         expiryDate: "2026-08-27",
+        expiryType: "best_before",
         storageLocation: "fridge",
         quantity: 1,
         productId: null,
+        categoryId: otherCategoryA,
       }],
     })
     assert(!committed.error, committed.error?.message ?? "capture commit failed")
-    assert(committed.data === 1, `expected one committed item, got ${committed.data}`)
+    assert(committed.data?.length === 1, `expected one committed row, got ${committed.data?.length}`)
+    assert(committed.data[0].category_id === otherCategoryA, "capture returned the wrong category")
     const inventory = await a
       .from("inventory_items")
       .select("id, source, source_capture_item_id")
@@ -517,7 +591,7 @@ async function main() {
       .single()
     assert(!inventory.error && inventory.data, inventory.error?.message ?? "captured inventory missing")
     assert(inventory.data.source === "ai", "photo capture source was not ai")
-    const repeated = await a.rpc("commit_capture_session", {
+    const repeated = await a.rpc("commit_capture_session_v2", {
       p_session_id: captureSessionA,
       p_confirmed_items: [{
         captureItemId: captureItemA,
@@ -525,6 +599,7 @@ async function main() {
         expiryDate: "2026-08-27",
         storageLocation: "fridge",
         quantity: 1,
+        categoryId: otherCategoryA,
       }],
     })
     assert(repeated.error, "capture session committed twice")
@@ -759,6 +834,87 @@ async function main() {
     assert(!error, error?.message ?? "select failed")
     const ids = new Set((data ?? []).map((row) => row.id))
     assert(ids.has(houseA) && ids.has(houseB), "B did not see both households")
+  })
+
+  let memberItemA
+  await check("member B can assign an A category to an A item", async () => {
+    const { data, error } = await b
+      .from("inventory_items")
+      .insert({
+        household_id: houseA,
+        display_name: "Shared breakfast",
+        expiry_date: "2026-08-28",
+        storage_location: "pantry",
+        category_id: customCategoryA,
+      })
+      .select("id, category_id")
+      .single()
+    assert(!error && data, error?.message ?? "member category assignment failed")
+    assert(data.category_id === customCategoryA, "member assignment used the wrong category")
+    memberItemA = data.id
+  })
+
+  await check("member B cannot manage A categories", async () => {
+    const { error } = await b.rpc("create_household_category", {
+      p_household_id: houseA,
+      p_name: "Member managed",
+      p_icon_key: "shapes",
+    })
+    assert(error, "member created an owner-managed category")
+  })
+
+  await check("member B cannot bulk organize A inventory", async () => {
+    const { error } = await b.rpc("apply_category_assignments", {
+      p_household_id: houseA,
+      p_assignments: [{ itemId: memberItemA, categoryId: otherCategoryA }],
+    })
+    assert(error, "member used the owner-only bulk assignment RPC")
+  })
+
+  await check("owner bulk assignment is protected and atomic per item", async () => {
+    const { data, error } = await a.rpc("apply_category_assignments", {
+      p_household_id: houseA,
+      p_assignments: [{ itemId: memberItemA, categoryId: customCategoryA }],
+    })
+    assert(!error, error?.message ?? "owner bulk assignment failed")
+    assert(data === 1, `expected one updated item, got ${data}`)
+  })
+
+  await check("Other cannot be archived", async () => {
+    const { error } = await a.rpc("archive_household_category", {
+      p_category_id: otherCategoryA,
+    })
+    assert(error, "Other was archived")
+  })
+
+  await check("archiving a category reassigns active items to Other", async () => {
+    const { data, error } = await a.rpc("archive_household_category", {
+      p_category_id: customCategoryA,
+    })
+    assert(!error, error?.message ?? "category archive failed")
+    assert(data === 1, `expected one reassigned item, got ${data}`)
+    const item = await a.from("inventory_items").select("category_id").eq("id", memberItemA).single()
+    assert(!item.error, item.error?.message ?? "reassigned item could not be read")
+    assert(item.data.category_id === otherCategoryA, "archived category item was not moved to Other")
+    await a.from("inventory_items").delete().eq("id", memberItemA)
+  })
+
+  await check("member sees and updates only their own A reminder preferences", async () => {
+    const own = await b
+      .from("household_notification_preferences")
+      .select("user_id, remind_three_days_before")
+      .eq("household_id", houseA)
+    assert(!own.error, own.error?.message ?? "member preference select failed")
+    assert(own.data?.length === 1 && own.data[0].user_id === userB.userId, "B saw another member's preference")
+    const updated = await b
+      .from("household_notification_preferences")
+      .update({ remind_three_days_before: false })
+      .eq("household_id", houseA)
+      .eq("user_id", userB.userId)
+      .select("remind_three_days_before")
+      .single()
+    assert(!updated.error, updated.error?.message ?? "member preference update failed")
+    assert(updated.data.remind_three_days_before === false, "member preference did not update")
   })
 
   await check("member B cannot create an invite for A", async () => {

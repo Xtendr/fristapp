@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react"
 import { ChevronRightIcon, Trash2Icon } from "lucide-react"
+import { CategoryIcon } from "@/lib/categories/icons"
 
 import { Button } from "@/components/ui/button"
 import { useOptionalAppSession } from "@/lib/app-session"
@@ -161,7 +162,11 @@ export function InventoryRow({
         className="group relative flex min-h-16 w-full touch-pan-y select-none items-center justify-between gap-3 bg-card px-3 py-3 text-left text-sm transition-[transform,background-color] duration-150 [-webkit-touch-callout:none] hover:bg-muted/60 active:bg-muted"
         style={{ transform: `translateX(${offset}px)` }}
       >
-        <div className="flex min-w-0 flex-col gap-0.5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            <CategoryIcon iconKey={item.category?.iconKey ?? "shapes"} className="size-4" />
+          </span>
+          <span className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate font-medium">
             {item.displayName}
             {item.quantity > 1 ? (
@@ -170,8 +175,9 @@ export function InventoryRow({
               </span>
             ) : null}
           </span>
-          <span className="text-xs text-muted-foreground">
-            {storageLabel(item.storageLocation)}
+          <span className="truncate text-xs text-muted-foreground">
+            {item.category?.name ?? "Other"} · {storageLabel(item.storageLocation)}
+          </span>
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-2">

@@ -36,6 +36,15 @@ type MemberRow = {
   user_id: string
 }
 
+type PreferenceRow = {
+  household_id: string
+  user_id: string
+  household_reminders_enabled: boolean
+  remind_three_days_before: boolean
+  remind_one_day_before: boolean
+  remind_on_expiry: boolean
+}
+
 type DeliveryRow = {
   inventory_item_id: string
   push_subscription_id: string
@@ -292,12 +301,19 @@ async function dispatchReminders(options: {
     return json(200, { ok: true, mode: "cron", sent: 0, failed: 0, skipped: 0 })
   }
 
-  const { data: subscriptions, error: subsError } = await options.admin
+  const [{ data: subscriptions, error: subsError }, { data: preferences, error: preferencesError }] = await Promise.all([
+    options.admin
     .from("push_subscriptions")
     .select("id, user_id, endpoint, p256dh, auth")
-    .in("user_id", userIds)
+    .in("user_id", userIds),
+    options.admin
+      .from("household_notification_preferences")
+      .select("household_id, user_id, household_reminders_enabled, remind_three_days_before, remind_one_day_before, remind_on_expiry")
+      .in("household_id", householdIds)
+      .in("user_id", userIds),
+  ])
 
-  if (subsError) {
+  if (subsError || preferencesError) {
     return json(500, { ok: false, error: "Could not load subscriptions." })
   }
 
@@ -334,6 +350,20 @@ async function dispatchReminders(options: {
     subscriptionsByUser.set(subscription.user_id, list)
   }
 
+  const preferencesByMembership = new Map<string, PreferenceRow>()
+  for (const preference of (preferences ?? []) as PreferenceRow[]) {
+    preferencesByMembership.set(`${preference.household_id}:${preference.user_id}`, preference)
+  }
+
+  function preferenceAllows(householdId: string, userId: string, offset: ReminderOffset) {
+    const preference = preferencesByMembership.get(`${householdId}:${userId}`)
+    if (!preference) return true
+    if (!preference.household_reminders_enabled) return false
+    if (offset === 3) return preference.remind_three_days_before
+    if (offset === 1) return preference.remind_one_day_before
+    return preference.remind_on_expiry
+  }
+
   let sent = 0
   let failed = 0
   let skipped = 0
@@ -354,6 +384,10 @@ async function dispatchReminders(options: {
     }
 
     for (const userId of memberIds) {
+      if (!preferenceAllows(item.household_id, userId, offset as ReminderOffset)) {
+        skipped += 1
+        continue
+      }
       const userSubs = subscriptionsByUser.get(userId) ?? []
       for (const subscription of userSubs) {
         const key = `${item.id}:${subscription.id}:${offset}:${item.expiry_date}`

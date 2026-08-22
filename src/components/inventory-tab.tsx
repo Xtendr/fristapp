@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { SearchIcon } from "lucide-react"
+import { SearchIcon, TagsIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { InventoryRow } from "@/components/inventory-row"
@@ -24,14 +24,19 @@ export function InventoryTab({
     openInventoryItem,
     removeInventoryItem,
     addInventoryItem,
+    categories: sessionCategories,
   } = useAppSession()
   const items = inventory ?? initialItems ?? []
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<Filter>("all")
+  const [categoryId, setCategoryId] = useState<string | null>(null)
   const [revealedItemId, setRevealedItemId] = useState<string | null>(null)
   const normalizedQuery = query.trim().toLocaleLowerCase("da-DK")
+  const categories = sessionCategories ?? []
+  const activeCategory = categories.find((category) => category.id === categoryId)
   const visibleItems = items.filter((item) =>
     (filter === "all" || item.storageLocation === filter) &&
+    (!categoryId || item.category?.id === categoryId) &&
     (!normalizedQuery || item.displayName.toLocaleLowerCase("da-DK").includes(normalizedQuery))
   )
 
@@ -64,6 +69,21 @@ export function InventoryTab({
         {(["all", "fridge", "freezer", "pantry"] as const).map((value) => (
           <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={cn("min-h-11 touch-manipulation rounded-lg px-3 text-sm capitalize text-muted-foreground transition-colors hover:bg-muted", filter === value && "bg-primary text-primary-foreground hover:bg-primary")}>{value}</button>
         ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="relative inline-flex min-h-10 items-center gap-2 rounded-lg border bg-background px-3 text-sm font-medium">
+          <TagsIcon className="size-4 text-muted-foreground" />
+          <span>{activeCategory ? "Change category" : "Category"}</span>
+          <select aria-label="Filter inventory by category" value={categoryId ?? ""} onChange={(event) => setCategoryId(event.target.value || null)} className="absolute inset-0 cursor-pointer opacity-0">
+            <option value="">All categories</option>
+            {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+          </select>
+        </label>
+        {activeCategory ? (
+          <button type="button" onClick={() => setCategoryId(null)} className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-muted px-3 text-xs font-medium">
+            {activeCategory.name}<XIcon className="size-3.5" />
+          </button>
+        ) : null}
       </div>
       {items.length === 0 ? (
         <p className="text-sm leading-6 text-muted-foreground">

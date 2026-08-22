@@ -46,21 +46,32 @@ export async function createInventoryItem(
       household_id: household.householdId,
       display_name: parsed.data.displayName,
       expiry_date: parsed.data.expiryDate,
+      expiry_type: parsed.data.expiryType,
       storage_location: parsed.data.storageLocation,
       quantity: parsed.data.quantity,
+      category_id: parsed.data.categoryId,
       source: context.data.source,
       product_id: context.data.productId ?? null,
     })
-    .select("id, display_name, quantity, expiry_date, storage_location")
+    .select("id, display_name, quantity, expiry_date, expiry_type, storage_location, product_id, category_id, household_categories(name, icon_key), added_by, profiles!inventory_items_added_by_fkey(display_name)")
     .single()
 
   if (error || !data) {
     return { error: publicErrorMessage(error) }
   }
 
+  if (data.product_id) {
+    await supabase.rpc("remember_product_preference", {
+      p_household_id: household.householdId,
+      p_product_id: data.product_id,
+      p_category_id: parsed.data.categoryId,
+      p_storage_location: parsed.data.storageLocation,
+    })
+  }
+
   // The mounted tab shell owns the live inventory state. Returning the inserted
   // row avoids both a full-layout RSC re-render and a second browser-side query.
-  return { item: mapInventoryItem(data) }
+  return { item: mapInventoryItem(data as Parameters<typeof mapInventoryItem>[0]) }
 }
 
 export async function updateInventoryItem(
@@ -85,19 +96,30 @@ export async function updateInventoryItem(
     .update({
       display_name: parsed.data.displayName,
       expiry_date: parsed.data.expiryDate,
+      expiry_type: parsed.data.expiryType,
       storage_location: parsed.data.storageLocation,
       quantity: parsed.data.quantity,
+      category_id: parsed.data.categoryId,
     })
     .eq("id", itemId)
     .eq("household_id", household.householdId)
-    .select("id, display_name, quantity, expiry_date, storage_location")
+    .select("id, display_name, quantity, expiry_date, expiry_type, storage_location, product_id, category_id, household_categories(name, icon_key), added_by, profiles!inventory_items_added_by_fkey(display_name)")
     .single()
 
   if (error || !data) {
     return { error: publicErrorMessage(error) }
   }
 
-  return { item: mapInventoryItem(data) }
+  if (data.product_id) {
+    await supabase.rpc("remember_product_preference", {
+      p_household_id: household.householdId,
+      p_product_id: data.product_id,
+      p_category_id: parsed.data.categoryId,
+      p_storage_location: parsed.data.storageLocation,
+    })
+  }
+
+  return { item: mapInventoryItem(data as Parameters<typeof mapInventoryItem>[0]) }
 }
 
 export async function deleteInventoryItem(

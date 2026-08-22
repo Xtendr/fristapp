@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2"
+import { mapExternalCategoryTags, type CategorySystemKey } from "../_shared/category-mapping.ts"
 
 type ProductRecord = {
   id: string
@@ -11,6 +12,7 @@ type ProductRecord = {
   locale: string | null
   source: "open_food_facts" | "user_confirmed"
   last_refreshed_at: string
+  category_key: CategorySystemKey | null
 }
 
 type ProductInput = {
@@ -55,7 +57,41 @@ function publicProduct(product: ProductRecord) {
     packageSize: product.package_size,
     imageUrl: product.image_url,
     source: product.source,
+    categoryKey: product.category_key,
   }
+}
+
+async function resolvePreference(
+  admin: ReturnType<typeof createClient>,
+  householdId: string,
+  product: ProductRecord,
+) {
+  const { data: remembered } = await admin
+    .from("household_product_preferences")
+    .select("preferred_category_id, usual_storage_location")
+    .eq("household_id", householdId)
+    .eq("product_id", product.id)
+    .maybeSingle()
+  if (remembered) {
+    return {
+      categoryId: remembered.preferred_category_id,
+      storageLocation: remembered.usual_storage_location,
+      source: "household",
+    }
+  }
+
+  if (!product.category_key) return null
+  const key = product.category_key
+  const { data: category } = await admin
+    .from("household_categories")
+    .select("id")
+    .eq("household_id", householdId)
+    .eq("system_key", key)
+    .is("archived_at", null)
+    .maybeSingle()
+  return category
+    ? { categoryId: category.id, storageLocation: "fridge", source: product.source === "open_food_facts" ? "open_food_facts" : "product_cache" }
+    : null
 }
 
 function isFresh(product: ProductRecord): boolean {
@@ -84,7 +120,7 @@ Deno.serve(async (req) => {
     return json(401, { status: "invalid", message: "Your session has expired." })
   }
 
-  let body: { operation?: unknown; gtin?: unknown; locale?: unknown; product?: ProductInput }
+  let body: { operation?: unknown; gtin?: unknown; householdId?: unknown; locale?: unknown; product?: ProductInput }
   try {
     body = await req.json()
   } catch {
@@ -96,6 +132,17 @@ Deno.serve(async (req) => {
     return json(400, { status: "invalid", message: "Invalid GTIN." })
   }
   const locale = cleanOptional(body.locale, 16) ?? "da-DK"
+  const householdId = typeof body.householdId === "string" ? body.householdId : null
+  if (body.operation === "lookup") {
+    if (!householdId) return json(400, { status: "invalid", message: "Household is required." })
+    const { data: membership } = await admin
+      .from("household_members")
+      .select("household_id")
+      .eq("household_id", householdId)
+      .eq("user_id", authData.user.id)
+      .maybeSingle()
+    if (!membership) return json(403, { status: "invalid", message: "Household access denied." })
+  }
 
   if (body.operation === "confirm") {
     const displayName = cleanOptional(body.product?.displayName, 120)
@@ -116,10 +163,11 @@ Deno.serve(async (req) => {
           locale,
           source: "user_confirmed",
           last_refreshed_at: new Date().toISOString(),
+          category_key: null,
         },
         { onConflict: "gtin" }
       )
-      .select("id, gtin, display_name, brand, variant, package_size, image_url, locale, source, last_refreshed_at")
+      .select("id, gtin, display_name, brand, variant, package_size, image_url, locale, source, last_refreshed_at, category_key")
       .single<ProductRecord>()
 
     if (error || !data) return json(503, { status: "unavailable", message: "Product could not be saved." })
@@ -132,38 +180,38 @@ Deno.serve(async (req) => {
 
   const { data: cached } = await admin
     .from("products")
-    .select("id, gtin, display_name, brand, variant, package_size, image_url, locale, source, last_refreshed_at")
+    .select("id, gtin, display_name, brand, variant, package_size, image_url, locale, source, last_refreshed_at, category_key")
     .eq("gtin", gtin)
     .maybeSingle<ProductRecord>()
 
   if (cached && isFresh(cached)) {
-    return json(200, { status: "found", product: publicProduct(cached), cache: "hit" })
+    return json(200, { status: "found", product: publicProduct(cached), preference: await resolvePreference(admin, householdId!, cached), cache: "hit" })
   }
 
   const userAgent = Deno.env.get("OPEN_FOOD_FACTS_USER_AGENT")
   if (!userAgent) {
     return cached
-      ? json(200, { status: "found", product: publicProduct(cached), cache: "stale" })
+      ? json(200, { status: "found", product: publicProduct(cached), preference: await resolvePreference(admin, householdId!, cached), cache: "stale" })
       : json(503, { status: "unavailable", message: "Online product lookup is not configured." })
   }
 
   let response: Response
   try {
-    const fields = "code,product_name,product_name_da,product_name_en,brands,quantity,image_front_url"
+    const fields = "code,product_name,product_name_da,product_name_en,brands,quantity,image_front_url,categories_tags"
     response = await fetch(
       `https://world.openfoodfacts.org/api/v3/product/${encodeURIComponent(gtin)}?fields=${fields}`,
       { headers: { "User-Agent": userAgent, Accept: "application/json" } }
     )
   } catch {
     return cached
-      ? json(200, { status: "found", product: publicProduct(cached), cache: "stale" })
+      ? json(200, { status: "found", product: publicProduct(cached), preference: await resolvePreference(admin, householdId!, cached), cache: "stale" })
       : json(503, { status: "unavailable", message: "Product lookup is temporarily unavailable." })
   }
 
   if (response.status === 404) return json(200, { status: "not_found" })
   if (!response.ok) {
     return cached
-      ? json(200, { status: "found", product: publicProduct(cached), cache: "stale" })
+      ? json(200, { status: "found", product: publicProduct(cached), preference: await resolvePreference(admin, householdId!, cached), cache: "stale" })
       : json(503, { status: "unavailable", message: "Product lookup is temporarily unavailable." })
   }
 
@@ -183,6 +231,7 @@ Deno.serve(async (req) => {
     variant: null,
     package_size: cleanOptional(offProduct?.quantity, 80),
     image_url: cleanOptional(offProduct?.image_front_url, 500),
+    category_key: mapExternalCategoryTags(offProduct?.categories_tags),
     locale,
     source: "open_food_facts" as const,
     last_refreshed_at: new Date().toISOString(),
@@ -190,9 +239,9 @@ Deno.serve(async (req) => {
   const { data, error } = await admin
     .from("products")
     .upsert(record, { onConflict: "gtin" })
-    .select("id, gtin, display_name, brand, variant, package_size, image_url, locale, source, last_refreshed_at")
+    .select("id, gtin, display_name, brand, variant, package_size, image_url, locale, source, last_refreshed_at, category_key")
     .single<ProductRecord>()
 
   if (error || !data) return json(503, { status: "unavailable", message: "Product could not be cached." })
-  return json(200, { status: "found", product: publicProduct(data), cache: "miss" })
+  return json(200, { status: "found", product: publicProduct(data), preference: await resolvePreference(admin, householdId!, data), cache: "miss" })
 })

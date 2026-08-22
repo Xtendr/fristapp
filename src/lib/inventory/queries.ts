@@ -8,7 +8,7 @@ async function listInventory(householdId: string, untilDate?: string) {
   const supabase = await createClient()
   let query = supabase
     .from("inventory_items")
-    .select("id, display_name, quantity, expiry_date, storage_location")
+    .select("id, display_name, quantity, expiry_date, expiry_type, storage_location, product_id, category_id, household_categories(name, icon_key), added_by, profiles!inventory_items_added_by_fkey(display_name)")
     .eq("household_id", householdId)
     .order("expiry_date", { ascending: true })
     .order("created_at", { ascending: true })
@@ -22,7 +22,7 @@ async function listInventory(householdId: string, untilDate?: string) {
     return []
   }
 
-  return data.map(mapInventoryItem)
+  return data.map((row) => mapInventoryItem(row as Parameters<typeof mapInventoryItem>[0]))
 }
 
 export async function getHouseholdInventory(householdId: string) {
@@ -37,7 +37,7 @@ export async function getInventoryItem(householdId: string, itemId: string) {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("inventory_items")
-    .select("id, display_name, quantity, expiry_date, storage_location")
+    .select("id, display_name, quantity, expiry_date, expiry_type, storage_location, product_id, category_id, household_categories(name, icon_key), added_by, profiles!inventory_items_added_by_fkey(display_name)")
     .eq("household_id", householdId)
     .eq("id", itemId)
     .maybeSingle()
@@ -46,5 +46,5 @@ export async function getInventoryItem(householdId: string, itemId: string) {
     return null
   }
 
-  return mapInventoryItem(data)
+  return mapInventoryItem(data as Parameters<typeof mapInventoryItem>[0])
 }

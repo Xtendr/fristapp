@@ -29,16 +29,41 @@ Deno.serve(async (req) => {
   const admin = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   })
+  const now = new Date().toISOString()
   const committedBefore = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-  const { data: expired } = await admin
+  const retainedBefore = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+  const { data: imageCleanup } = await admin
     .from("capture_sessions")
-    .select("id, capture_items(product_image_path, expiry_image_path)")
-    .or(`expires_at.lt.${new Date().toISOString()},and(status.eq.committed,committed_at.lt.${committedBefore})`)
+    .select("id, capture_items(id, product_image_path, expiry_image_path, images_deleted_at)")
+    .eq("status", "committed")
+    .lt("committed_at", committedBefore)
     .limit(100)
 
   let removedSessions = 0
   let removedImages = 0
-  for (const session of expired ?? []) {
+  for (const session of imageCleanup ?? []) {
+    const items = (session.capture_items ?? []) as Array<{ id: string; product_image_path: string | null; expiry_image_path: string | null; images_deleted_at: string | null }>
+    const paths = items
+      .filter((item) => !item.images_deleted_at)
+      .flatMap((item) => [item.product_image_path, item.expiry_image_path])
+      .filter((path: string | null): path is string => Boolean(path))
+    if (paths.length) {
+      const { error } = await admin.storage.from("capture-images").remove(paths)
+      if (error) continue
+      removedImages += paths.length
+    }
+    if (items.length) {
+      await admin.from("capture_items").update({ product_image_path: null, expiry_image_path: null, images_deleted_at: now }).in("id", items.map((item) => item.id))
+    }
+  }
+
+  const { data: purgeable } = await admin
+    .from("capture_sessions")
+    .select("id, capture_items(product_image_path, expiry_image_path)")
+    .or(`and(status.neq.committed,expires_at.lt.${now}),and(status.eq.committed,committed_at.lt.${retainedBefore})`)
+    .limit(100)
+
+  for (const session of purgeable ?? []) {
     const paths = (session.capture_items ?? [])
       .flatMap((item: { product_image_path: string | null; expiry_image_path: string | null }) => [item.product_image_path, item.expiry_image_path])
       .filter((path: string | null): path is string => Boolean(path))
@@ -51,5 +76,5 @@ Deno.serve(async (req) => {
     if (!error) removedSessions += 1
   }
 
-  return json(200, { removedSessions, removedImages })
+  return json(200, { removedSessions, removedImages, retainedDays: 90 })
 })

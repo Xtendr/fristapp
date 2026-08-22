@@ -5,6 +5,7 @@ import { Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { ExpiryDateField } from "@/components/expiry-date-field"
+import { CategoryPicker } from "@/components/category-picker"
 import { QuantityStepper } from "@/components/quantity-stepper"
 import { StorageLocationPicker } from "@/components/storage-location-picker"
 import {
@@ -35,20 +36,25 @@ import {
 } from "@/lib/inventory/actions"
 import { useOptionalAppSession } from "@/lib/app-session"
 import { confirmProduct } from "@/lib/capture/product-resolver"
-import type { StorageLocation } from "@/lib/supabase/database.types"
+import { otherCategory } from "@/lib/categories/types"
+import type { ExpiryType, StorageLocation } from "@/lib/supabase/database.types"
 
 export type InventoryFormValues = {
   displayName: string
   expiryDate: string
+  expiryType: ExpiryType
   storageLocation: StorageLocation
   quantity: number
+  categoryId: string
 }
 
 const emptyCreateValues: InventoryFormValues = {
   displayName: "",
   expiryDate: "",
+  expiryType: "unknown",
   storageLocation: "fridge",
   quantity: 1,
+  categoryId: "",
 }
 
 export function InventoryItemForm({
@@ -78,6 +84,8 @@ export function InventoryItemForm({
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const session = useOptionalAppSession()
+  const categories = session?.categories ?? []
+  const selectedCategoryId = values.categoryId || otherCategory(categories)?.id || ""
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -113,8 +121,10 @@ export function InventoryItemForm({
         setValues((current) => ({
           displayName: "",
           expiryDate: "",
+          expiryType: current.expiryType,
           storageLocation: current.storageLocation,
           quantity: 1,
+          categoryId: current.categoryId,
         }))
         return
       }
@@ -141,13 +151,26 @@ export function InventoryItemForm({
     }
     setError(null)
 
-    const removedItem = {
+    const existingItem = session?.inventory?.find((item) => item.id === itemId)
+    const selectedCategory = categories.find((category) => category.id === selectedCategoryId)
+    const removedItem = existingItem ?? {
       id: itemId,
       displayName: initialValues?.displayName ?? values.displayName,
       expiryDate: initialValues?.expiryDate ?? values.expiryDate,
       storageLocation:
         initialValues?.storageLocation ?? values.storageLocation,
       quantity: initialValues?.quantity ?? values.quantity,
+      expiryType: initialValues?.expiryType ?? values.expiryType,
+      productId: null,
+      category: {
+        id: selectedCategoryId,
+        name: selectedCategory?.name ?? "Other",
+        iconKey: selectedCategory?.iconKey ?? "shapes",
+      },
+      addedBy: {
+        id: session?.userId ?? "",
+        name: "You",
+      },
     }
 
     session?.removeInventoryItem(itemId)
@@ -206,6 +229,42 @@ export function InventoryItemForm({
           />
         </Field>
         <Field>
+          <FieldLabel>Date label</FieldLabel>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              ["best_before", "Best before"],
+              ["use_by", "Use by"],
+              ["unknown", "Not sure"],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={values.expiryType === value}
+                onClick={() => setValues((current) => ({ ...current, expiryType: value }))}
+                className={`min-h-10 rounded-lg border px-2 text-xs font-medium transition-colors ${
+                  values.expiryType === value
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-input bg-background text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <input type="hidden" name="expiryType" value={values.expiryType} />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="categoryId">Category</FieldLabel>
+          <CategoryPicker
+            categories={categories}
+            value={selectedCategoryId}
+            onChange={(categoryId) =>
+              setValues((current) => ({ ...current, categoryId }))
+            }
+            disabled={categories.length === 0}
+          />
+        </Field>
+        <Field>
           <FieldLabel>Storage</FieldLabel>
           <StorageLocationPicker
             name="storageLocation"
@@ -232,7 +291,7 @@ export function InventoryItemForm({
       </FieldGroup>
       {error ? <FieldError>{error}</FieldError> : null}
       <div className="flex flex-col gap-2">
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || !selectedCategoryId}>
           {pending ? <Spinner data-icon="inline-start" /> : null}
           {pending ? "Saving…" : mode === "create" ? submitLabel ?? "Save" : "Save changes"}
         </Button>

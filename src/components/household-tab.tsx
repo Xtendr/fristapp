@@ -5,6 +5,9 @@ import { ChevronDownIcon } from "lucide-react"
 import { InviteManager } from "@/components/invite-manager"
 import { NotificationEnablement } from "@/components/notification-enablement"
 import { RenameHouseholdForm } from "@/components/rename-household-form"
+import { CategoryManager } from "@/components/category-manager"
+import { ReminderPreferences } from "@/components/reminder-preferences"
+import { HouseholdSwitcher } from "@/components/household-switcher"
 import {
   LeaveHouseholdButton,
   RemoveMemberButton,
@@ -68,6 +71,8 @@ export function HouseholdTab({
         </details>
       ) : null}
 
+      {isOwner ? <CategoryManager /> : null}
+
       <section className="flex flex-col gap-2">
         <h2 className="type-section">Members</h2>
         <ul className="flex flex-col rounded-xl border bg-card px-3">
@@ -111,6 +116,8 @@ export function HouseholdTab({
       ) : null}
 
       <NotificationEnablement variant="household" />
+      <ReminderPreferences />
+      <HouseholdSwitcher />
 
       <div className="flex flex-col gap-2">
         <LeaveHouseholdButton householdId={householdId} />

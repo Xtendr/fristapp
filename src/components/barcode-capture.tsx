@@ -10,12 +10,15 @@ import { Spinner } from "@/components/ui/spinner"
 import { normalizeGtin, type BarcodeKind } from "@/lib/capture/gtin"
 import { lookupProduct, type ResolvedProduct } from "@/lib/capture/product-resolver"
 import { cn } from "@/lib/utils"
+import { useAppSession } from "@/lib/app-session"
+import { otherCategory } from "@/lib/categories/types"
+import type { ProductPreference } from "@/lib/capture/product-resolver"
 
 type ScanState =
   | { status: "idle" }
   | { status: "scanning" }
   | { status: "looking_up"; gtin: string }
-  | { status: "ready"; gtin: string; product: ResolvedProduct | null; lookupUnavailable: boolean }
+  | { status: "ready"; gtin: string; product: ResolvedProduct | null; preference: ProductPreference | null; lookupUnavailable: boolean }
   | { status: "error"; message: string }
 
 function barcodeKind(value: string): BarcodeKind {
@@ -24,6 +27,7 @@ function barcodeKind(value: string): BarcodeKind {
 }
 
 export function BarcodeCapture() {
+  const { householdId, categories } = useAppSession()
   const [state, setState] = useState<ScanState>({ status: "idle" })
   const [typedCode, setTypedCode] = useState("")
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -48,11 +52,12 @@ export function BarcodeCapture() {
     handlingRef.current = true
     stopScanner()
     setState({ status: "looking_up", gtin: normalized.gtin })
-    const result = await lookupProduct(normalized.gtin)
+    const result = await lookupProduct(normalized.gtin, householdId)
     setState({
       status: "ready",
       gtin: normalized.gtin,
       product: result.status === "found" ? result.product : null,
+      preference: result.status === "found" ? result.preference : null,
       lookupUnavailable: result.status === "unavailable",
     })
     handlingRef.current = false
@@ -119,6 +124,10 @@ export function BarcodeCapture() {
   }
 
   const ready = state.status === "ready" ? state : null
+  const suggestedCategoryId = ready?.preference?.categoryId
+    ?? categories?.find((category) => category.systemKey === ready?.product?.categoryKey)?.id
+    ?? otherCategory(categories ?? [])?.id
+    ?? ""
   return (
     <div className="flex flex-col gap-4">
       {!ready ? <div className="overflow-hidden rounded-xl border bg-card">
@@ -178,7 +187,7 @@ export function BarcodeCapture() {
           <InventoryItemForm
             key={`${ready.gtin}-${ready.product?.id ?? "new"}`}
             mode="create"
-            initialValues={{ displayName: ready.product?.displayName ?? "", expiryDate: "", storageLocation: "fridge", quantity: 1 }}
+            initialValues={{ displayName: ready.product?.displayName ?? "", expiryDate: "", expiryType: "unknown", storageLocation: ready.preference?.storageLocation ?? "fridge", quantity: 1, categoryId: suggestedCategoryId }}
             captureContext={{ source: "barcode", productId: ready.product?.id, gtin: ready.gtin }}
             submitLabel="Add to inventory"
             onSaved={reset}

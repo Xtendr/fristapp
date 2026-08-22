@@ -419,6 +419,9 @@ verify_jwt = false
 [functions.capture-cleanup]
 verify_jwt = false
 
+[functions.classify-inventory]
+verify_jwt = false
+
 [experimental.pgdelta]
 enabled = true
 # Directory under `supabase/` where declarative files are written.
